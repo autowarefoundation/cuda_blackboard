@@ -44,21 +44,18 @@ void CudaBlackboardPublisher<T>::publish(std::unique_ptr<const T> cuda_msg_ptr)
   std::string key_name =
     negotiated::detail::generate_key(ros_type_name, NegotiationStruct<T>::supported_type_name);
 
-  std::unique_ptr<typename T::ros_type> ros_msg_ptr;
-
-  // Note: it is better to publish the blackboard first, since ros data can take longer...
-  if (
+  uint64_t instance_id{0};
+  bool publish_ros_msg =
     negotiated_pub_->type_was_negotiated<NegotiationStruct<typename T::ros_type>>() &&
     (compatible_pub_->get_subscription_count() > 0 ||
-     compatible_pub_->get_intra_process_subscription_count() > 0)) {
-    // Using the standard adaptation pipeline was creating a copy of the data, which is not what we
-    // want
-    ros_msg_ptr = std::make_unique<typename T::ros_type>();
-    rclcpp::TypeAdapter<T>::convert_to_ros_message(*cuda_msg_ptr, *ros_msg_ptr);
-  }
+     compatible_pub_->get_intra_process_subscription_count() > 0);
+  bool publish_blackboard_msg =
+    negotiated_pub_->type_was_negotiated<NegotiationStruct<T>>() && map.count(key_name) > 0;
+
+  auto & blackboard = CudaBlackboard<T>::getInstance();
 
   // When we want to publish cuda data, we instead use the blackboard
-  if (negotiated_pub_->type_was_negotiated<NegotiationStruct<T>>() && map.count(key_name) > 0) {
+  if (publish_blackboard_msg) {
     auto & publisher = map.at(key_name).publisher;
     std::size_t tickets =
       publisher->get_intra_process_subscription_count();  // tickets are only given to intra process
@@ -68,8 +65,11 @@ void CudaBlackboardPublisher<T>::publish(std::unique_ptr<const T> cuda_msg_ptr)
       return;
     }
 
-    auto & blackboard = CudaBlackboard<T>::getInstance();
-    uint64_t instance_id = blackboard.registerData(
+    if (publish_ros_msg) {
+      tickets++;
+    }
+
+    instance_id = blackboard.registerData(
       std::string(node_.get_fully_qualified_name()) + "_" + publisher->get_topic_name(),
       std::move(cuda_msg_ptr), tickets);
 
@@ -79,13 +79,19 @@ void CudaBlackboardPublisher<T>::publish(std::unique_ptr<const T> cuda_msg_ptr)
     auto instance_msg = std_msgs::msg::UInt64();
     instance_msg.data = static_cast<uint64_t>(instance_id);
     negotiated_pub_->publish<NegotiationStruct<T>>(instance_msg);
+  } else if (publish_ros_msg) {
+    auto ros_msg_ptr = std::make_unique<typename T::ros_type>();
+    rclcpp::TypeAdapter<T>::convert_to_ros_message(*cuda_msg_ptr, *ros_msg_ptr);
+
+    compatible_pub_->publish(std::move(ros_msg_ptr));
   }
 
   // When we want to publish ros data, we need to use type adaptation
-  if (
-    negotiated_pub_->type_was_negotiated<NegotiationStruct<typename T::ros_type>>() &&
-    (compatible_pub_->get_subscription_count() > 0 ||
-     compatible_pub_->get_intra_process_subscription_count() > 0)) {
+  if (publish_blackboard_msg && publish_ros_msg) {
+    auto data = blackboard.queryData(instance_id);
+    auto ros_msg_ptr = std::make_unique<typename T::ros_type>();
+    rclcpp::TypeAdapter<T>::convert_to_ros_message(*data, *ros_msg_ptr);
+
     compatible_pub_->publish(std::move(ros_msg_ptr));
   }
 }
