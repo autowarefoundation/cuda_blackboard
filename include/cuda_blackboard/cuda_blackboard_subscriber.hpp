@@ -16,10 +16,6 @@ template <typename T>
 class CudaBlackboardSubscriber
 {
 public:
-  [[deprecated]] CudaBlackboardSubscriber(
-    rclcpp::Node & node, const std::string & topic_name, bool add_compatible_sub,
-    std::function<void(std::shared_ptr<const T>)> callback);
-
   CudaBlackboardSubscriber(
     rclcpp::Node & node, const std::string & topic_name,
     std::function<void(std::shared_ptr<const T>)> callback);
