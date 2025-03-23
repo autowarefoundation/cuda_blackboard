@@ -43,6 +43,39 @@ CudaBlackboardSubscriber<T>::CudaBlackboardSubscriber(
 }
 
 template <typename T>
+CudaBlackboardSubscriber<T>::CudaBlackboardSubscriber(
+  rclcpp::Node & node, const std::string & topic_name,
+  std::function<void(std::shared_ptr<const T>)> callback)
+: node_(node)
+{
+  using std::placeholders::_1;
+
+  negotiated::NegotiatedSubscriptionOptions negotiation_options;
+  negotiation_options.disconnect_on_negotiation_failure = false;
+
+  callback_ = callback;
+  negotiated_sub_ = std::make_shared<negotiated::NegotiatedSubscription>(
+    node, topic_name + "/cuda", negotiation_options);
+
+  rclcpp::SubscriptionOptions sub_options;
+  sub_options.use_intra_process_comm = rclcpp::IntraProcessSetting::Enable;
+
+  negotiated_sub_->add_supported_callback<NegotiationStruct<T>>(
+    1.0, rclcpp::QoS(1), std::bind(&CudaBlackboardSubscriber<T>::instanceIdCallback, this, _1),
+    sub_options);
+
+  std::string ros_type_name = NegotiationStruct<typename T::ros_type>::supported_type_name;
+
+  compatible_sub_ = node.create_subscription<typename T::ros_type>(
+    topic_name, rclcpp::SensorDataQoS(),
+    std::bind(&CudaBlackboardSubscriber<T>::compatibleCallback, this, _1), sub_options);
+
+  negotiated_sub_->add_compatible_subscription(compatible_sub_, ros_type_name, 0.1);
+
+  negotiated_sub_->start();
+}
+
+template <typename T>
 void CudaBlackboardSubscriber<T>::instanceIdCallback(const std_msgs::msg::UInt64 & instance_id_msg)
 {
   if (compatible_sub_ && negotiated_sub_->get_negotiated_topic_publisher_count() > 0) {
