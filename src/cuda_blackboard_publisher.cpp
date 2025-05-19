@@ -45,14 +45,17 @@ void CudaBlackboardPublisher<T>::publish(std::unique_ptr<const T> cuda_msg_ptr)
     negotiated::detail::generate_key(ros_type_name, NegotiationStruct<T>::supported_type_name);
 
   uint64_t instance_id{0};
-  bool publish_ros_msg =
+  const bool publish_ros_msg =
     negotiated_pub_->type_was_negotiated<NegotiationStruct<typename T::ros_type>>() &&
     (compatible_pub_->get_subscription_count() > 0 ||
      compatible_pub_->get_intra_process_subscription_count() > 0);
-  bool publish_blackboard_msg =
+  const bool publish_blackboard_msg =
     negotiated_pub_->type_was_negotiated<NegotiationStruct<T>>() && map.count(key_name) > 0;
 
   auto & blackboard = CudaBlackboard<T>::getInstance();
+
+  // If data is loaded from blackboard, the data which will be published as ros msg is stored in
+  // blackboard_data
   std::shared_ptr<const T> blackboard_data = nullptr;
 
   // When we want to publish cuda data, we instead use the blackboard
@@ -63,11 +66,13 @@ void CudaBlackboardPublisher<T>::publish(std::unique_ptr<const T> cuda_msg_ptr)
                                                           // subscribers
 
     if (tickets == 0 && !publish_ros_msg) {
-      RCLCPP_WARN(node_.get_logger(), "there is no intra process subscription");
+      // If there is no intra process blackboard subscription and ros msg is not published,
+      // abort this function
       return;
     }
 
     if (publish_ros_msg) {
+      // Add one more ticket for ROS conversion
       tickets++;
     }
 
@@ -78,13 +83,13 @@ void CudaBlackboardPublisher<T>::publish(std::unique_ptr<const T> cuda_msg_ptr)
     RCLCPP_DEBUG(
       node_.get_logger(), "Publishing instance id %lu with %ld tickets", instance_id, tickets);
 
-    RCLCPP_WARN(node_.get_logger(), "publish blackboard msg");
     auto instance_msg = std_msgs::msg::UInt64();
     instance_msg.data = static_cast<uint64_t>(instance_id);
     negotiated_pub_->publish<NegotiationStruct<T>>(instance_msg);
 
     if (publish_ros_msg) {
-      blackboard_data = blackboard.queryData(instance_id);  // for ROS conversion if needed
+      // Set blackboard data for ROS conversion
+      blackboard_data = blackboard.queryData(instance_id);
     }
   }
 
@@ -97,14 +102,12 @@ void CudaBlackboardPublisher<T>::publish(std::unique_ptr<const T> cuda_msg_ptr)
       rclcpp::TypeAdapter<T>::convert_to_ros_message(*cuda_msg_ptr, *ros_msg_ptr);
     }
 
-    RCLCPP_WARN(node_.get_logger(), "publish ros msg");
     compatible_pub_->publish(std::move(ros_msg_ptr));
   }
 
   if (!publish_blackboard_msg && !publish_ros_msg) {
     RCLCPP_WARN(node_.get_logger(), "No blackboard or ROS subscribers");
   }
-  RCLCPP_WARN(node_.get_logger(), "end publish");
 }
 
 template <typename T>
