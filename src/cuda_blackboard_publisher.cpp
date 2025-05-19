@@ -53,6 +53,7 @@ void CudaBlackboardPublisher<T>::publish(std::unique_ptr<const T> cuda_msg_ptr)
     negotiated_pub_->type_was_negotiated<NegotiationStruct<T>>() && map.count(key_name) > 0;
 
   auto & blackboard = CudaBlackboard<T>::getInstance();
+  std::shared_ptr<const T> blackboard_data = nullptr;
 
   // When we want to publish cuda data, we instead use the blackboard
   if (publish_blackboard_msg) {
@@ -61,7 +62,8 @@ void CudaBlackboardPublisher<T>::publish(std::unique_ptr<const T> cuda_msg_ptr)
       publisher->get_intra_process_subscription_count();  // tickets are only given to intra process
                                                           // subscribers
 
-    if (tickets == 0) {
+    if (tickets == 0 && !publish_ros_msg) {
+      RCLCPP_WARN(node_.get_logger(), "there is no intra process subscription");
       return;
     }
 
@@ -76,24 +78,33 @@ void CudaBlackboardPublisher<T>::publish(std::unique_ptr<const T> cuda_msg_ptr)
     RCLCPP_DEBUG(
       node_.get_logger(), "Publishing instance id %lu with %ld tickets", instance_id, tickets);
 
+    RCLCPP_WARN(node_.get_logger(), "publish blackboard msg");
     auto instance_msg = std_msgs::msg::UInt64();
     instance_msg.data = static_cast<uint64_t>(instance_id);
     negotiated_pub_->publish<NegotiationStruct<T>>(instance_msg);
-  } else if (publish_ros_msg) {
-    auto ros_msg_ptr = std::make_unique<typename T::ros_type>();
-    rclcpp::TypeAdapter<T>::convert_to_ros_message(*cuda_msg_ptr, *ros_msg_ptr);
 
+    if (publish_ros_msg) {
+      blackboard_data = blackboard.queryData(instance_id);  // for ROS conversion if needed
+    }
+  }
+
+  if (publish_ros_msg) {
+    std::unique_ptr<typename T::ros_type> ros_msg_ptr = std::make_unique<typename T::ros_type>();
+
+    if (blackboard_data) {
+      rclcpp::TypeAdapter<T>::convert_to_ros_message(*blackboard_data, *ros_msg_ptr);
+    } else {
+      rclcpp::TypeAdapter<T>::convert_to_ros_message(*cuda_msg_ptr, *ros_msg_ptr);
+    }
+
+    RCLCPP_WARN(node_.get_logger(), "publish ros msg");
     compatible_pub_->publish(std::move(ros_msg_ptr));
   }
 
-  // When we want to publish ros data, we need to use type adaptation
-  if (publish_blackboard_msg && publish_ros_msg) {
-    auto data = blackboard.queryData(instance_id);
-    auto ros_msg_ptr = std::make_unique<typename T::ros_type>();
-    rclcpp::TypeAdapter<T>::convert_to_ros_message(*data, *ros_msg_ptr);
-
-    compatible_pub_->publish(std::move(ros_msg_ptr));
+  if (!publish_blackboard_msg && !publish_ros_msg) {
+    RCLCPP_WARN(node_.get_logger(), "No blackboard or ROS subscribers");
   }
+  RCLCPP_WARN(node_.get_logger(), "end publish");
 }
 
 template <typename T>
