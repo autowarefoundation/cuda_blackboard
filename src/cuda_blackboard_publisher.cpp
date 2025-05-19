@@ -54,8 +54,8 @@ void CudaBlackboardPublisher<T>::publish(std::unique_ptr<const T> cuda_msg_ptr)
 
   auto & blackboard = CudaBlackboard<T>::getInstance();
 
-  // If data is loaded from blackboard, the data which will be published as ros msg is stored in
-  // blackboard_data
+  // When data is retrieved from the blackboard, it is stored in blackboard_data to be published as
+  // a ROS message.
   std::shared_ptr<const T> blackboard_data = nullptr;
 
   // When we want to publish cuda data, we instead use the blackboard
@@ -66,8 +66,7 @@ void CudaBlackboardPublisher<T>::publish(std::unique_ptr<const T> cuda_msg_ptr)
                                                           // subscribers
 
     if (tickets == 0 && !publish_ros_msg) {
-      // If there is no intra process blackboard subscription and ros msg is not published,
-      // abort this function
+      // Return early if there are no intra-process subscribers and no ROS subscribers
       return;
     }
 
