@@ -49,22 +49,19 @@ void CudaBlackboardPublisher<T>::publish(std::unique_ptr<const T> cuda_msg_ptr)
     negotiated_pub_->type_was_negotiated<NegotiationStruct<typename T::ros_type>>() &&
     (compatible_pub_->get_subscription_count() > 0 ||
      compatible_pub_->get_intra_process_subscription_count() > 0);
+
+  // tickets are only given to intra process subscribers
+  auto & publisher = map.at(key_name).publisher;
+  std::size_t tickets =
+    publisher != nullptr ? publisher->get_intra_process_subscription_count() : 0;
+
   bool publish_blackboard_msg =
-    negotiated_pub_->type_was_negotiated<NegotiationStruct<T>>() && map.count(key_name) > 0;
+    negotiated_pub_->type_was_negotiated<NegotiationStruct<T>>() && tickets > 0;
 
   auto & blackboard = CudaBlackboard<T>::getInstance();
 
   // When we want to publish cuda data, we instead use the blackboard
   if (publish_blackboard_msg) {
-    auto & publisher = map.at(key_name).publisher;
-    std::size_t tickets =
-      publisher->get_intra_process_subscription_count();  // tickets are only given to intra process
-                                                          // subscribers
-
-    if (tickets == 0) {
-      return;
-    }
-
     if (publish_ros_msg) {
       tickets++;
     }

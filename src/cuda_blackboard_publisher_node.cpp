@@ -50,6 +50,7 @@ public:
 
     auto publish_message = [this]() -> void {
       auto cuda_image_ptr = std::make_unique<CudaImage>(ros_image_);
+      cuda_image_ptr->header.stamp = this->now();
       RCLCPP_INFO(this->get_logger(), "Publishing message n=%d", count_++);
       pub_->publish(std::move(cuda_image_ptr));
     };
