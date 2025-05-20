@@ -50,7 +50,7 @@ void CudaBlackboardPublisher<T>::publish(std::unique_ptr<const T> cuda_msg_ptr)
     (compatible_pub_->get_subscription_count() > 0 ||
      compatible_pub_->get_intra_process_subscription_count() > 0);
 
-  // tickets are only given to intra process subcribers
+  // tickets are only given to intra process subscribers
   auto & publisher = map.at(key_name).publisher;
   std::size_t tickets =
     publisher != nullptr ? publisher->get_intra_process_subscription_count() : 0;
