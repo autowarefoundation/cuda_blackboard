@@ -57,24 +57,25 @@ std::shared_ptr<const T> CudaBlackboard<T>::queryData(const std::string & produc
   std::lock_guard<std::mutex> lock(mutex_);
   auto it = producer_to_data_map_.find(producer_name);
 
-  if (it != producer_to_data_map_.end()) {
-    it->second->tickets_--;
-    auto data = it->second->data_ptr_;
-
-    RCLCPP_DEBUG_STREAM(
-      rclcpp::get_logger("CudaBlackboard"),
-      "Producer " << producer_name << " has " << it->second->tickets_ << " tickets left");
-
-    if (it->second->tickets_ == 0) {
-      RCLCPP_DEBUG_STREAM(
-        rclcpp::get_logger("CudaBlackboard"), "Removing data from producer " << producer_name);
-      instance_id_to_data_map_.erase(it->second->instance_id_);
-      producer_to_data_map_.erase(it);
-    }
-
-    return data;
+  if (it == producer_to_data_map_.end()) {
+    return std::shared_ptr<const T>{};  // Indicate that the key was not found
   }
-  return std::shared_ptr<const T>{};  // Indicate that the key was not found
+  
+  it->second->tickets_--;
+  auto data = it->second->data_ptr_;
+
+  RCLCPP_DEBUG_STREAM(
+    rclcpp::get_logger("CudaBlackboard"),
+    "Producer " << producer_name << " has " << it->second->tickets_ << " tickets left");
+
+  if (it->second->tickets_ == 0) {
+    RCLCPP_DEBUG_STREAM(
+      rclcpp::get_logger("CudaBlackboard"), "Removing data from producer " << producer_name);
+    instance_id_to_data_map_.erase(it->second->instance_id_);
+    producer_to_data_map_.erase(it);
+  }
+
+  return data;
 }
 
 template <typename T>
@@ -83,26 +84,26 @@ std::shared_ptr<const T> CudaBlackboard<T>::queryData(uint64_t instance_id)
   std::lock_guard<std::mutex> lock(mutex_);
   auto it = instance_id_to_data_map_.find(instance_id);
 
-  if (it != instance_id_to_data_map_.end()) {
-    it->second->tickets_--;
-    std::shared_ptr<const T> data = it->second->data_ptr_;
-
-    RCLCPP_DEBUG_STREAM(
-      rclcpp::get_logger("CudaBlackboard"),
-      "Instance " << instance_id << " has " << it->second->tickets_ << " tickets left");
-
-    if (it->second->tickets_ == 0) {
-      RCLCPP_DEBUG_STREAM(
-        rclcpp::get_logger("CudaBlackboard"), "Removing data from instance " << instance_id);
-      producer_to_data_map_.erase(it->second->producer_name_);
-      instance_id_to_data_map_.erase(it);
-    }
-
-    assert(data);
-    return data;
+  if (it == instance_id_to_data_map_.end()) {
+    return std::shared_ptr<const T>{};  // Indicate that the key was not found
   }
 
-  return std::shared_ptr<const T>{};  // Indicate that the key was not found
+  it->second->tickets_--;
+  std::shared_ptr<const T> data = it->second->data_ptr_;
+
+  RCLCPP_DEBUG_STREAM(
+    rclcpp::get_logger("CudaBlackboard"),
+    "Instance " << instance_id << " has " << it->second->tickets_ << " tickets left");
+
+  if (it->second->tickets_ == 0) {
+    RCLCPP_DEBUG_STREAM(
+      rclcpp::get_logger("CudaBlackboard"), "Removing data from instance " << instance_id);
+    producer_to_data_map_.erase(it->second->producer_name_);
+    instance_id_to_data_map_.erase(it);
+  }
+
+  assert(data);
+  return data;
 }
 
 }  // namespace cuda_blackboard
