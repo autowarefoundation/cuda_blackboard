@@ -64,6 +64,8 @@ private:
   void reset();
 
   std::random_device rd_;
+
+  friend class CudaBlackboardTest;
 };
 
 }  // namespace cuda_blackboard

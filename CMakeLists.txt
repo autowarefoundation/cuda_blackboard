@@ -23,7 +23,22 @@ endif ()
 
 if(BUILD_TESTING)
     find_package(ament_lint_auto REQUIRED)
+    find_package(ament_cmake_gtest REQUIRED)
     ament_lint_auto_find_test_dependencies()
+
+    # Unit tests for core blackboard functionality
+    ament_add_gtest(test_cuda_blackboard
+        test/test_cuda_blackboard.cpp
+    )
+    target_link_libraries(test_cuda_blackboard
+        cuda_blackboard
+        ${CUDA_LIBRARIES}
+    )
+    target_include_directories(test_cuda_blackboard PRIVATE
+        include
+        test
+        ${CUDA_INCLUDE_DIRS}
+    )
 endif()
 
 include_directories(
