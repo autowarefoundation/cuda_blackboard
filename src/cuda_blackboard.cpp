@@ -16,6 +16,14 @@ CudaBlackboard<T> & CudaBlackboard<T>::getInstance()
 }
 
 template <typename T>
+void CudaBlackboard<T>::reset()
+{
+  std::lock_guard lock(mutex_);
+  producer_to_data_map_.clear();
+  instance_id_to_data_map_.clear();
+}
+
+template <typename T>
 uint64_t CudaBlackboard<T>::registerData(
   const std::string & producer_name, std::unique_ptr<const T> data, std::size_t tickets)
 {

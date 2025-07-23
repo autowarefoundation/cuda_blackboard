@@ -37,11 +37,21 @@ public:
   using DataPtrConst = std::shared_ptr<const T>;
   using CudaBlackboardDataWrapperPtr = std::shared_ptr<CudaBlackboardDataWrapper<T>>;
 
+  CudaBlackboard(const CudaBlackboard &) = delete;
+  CudaBlackboard & operator=(const CudaBlackboard &) = delete;
+
+  CudaBlackboard(CudaBlackboard &&) = delete;
+  CudaBlackboard & operator=(CudaBlackboard &&) = delete;
+
+  ~CudaBlackboard() = default;
+
   static CudaBlackboard & getInstance();
 
   uint64_t registerData(
     const std::string & producer_name, std::unique_ptr<const T> value, std::size_t tickets);
+
   std::shared_ptr<const T> queryData(const std::string & producer_name);
+
   std::shared_ptr<const T> queryData(uint64_t instance_id);
 
 private:
@@ -50,8 +60,8 @@ private:
   std::mutex mutex_;
 
   CudaBlackboard() {}
-  CudaBlackboard(const CudaBlackboard &) = delete;
-  CudaBlackboard & operator=(const CudaBlackboard &) = delete;
+
+  void reset();
 
   std::random_device rd_;
 };
