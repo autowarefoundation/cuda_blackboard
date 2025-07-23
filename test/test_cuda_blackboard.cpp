@@ -174,13 +174,11 @@ TEST_F(CudaBlackboardTest, ZeroTickets)
   const std::string producer_name = "zero_ticket_producer";
 
   // Register data with zero tickets (should not be registered)
-  auto id = blackboard.registerData(producer_name, std::move(test_pc), 0);
+  EXPECT_THROW(blackboard.registerData(producer_name, std::move(test_pc), 0), std::invalid_argument)
+    << "Should throw an exception when registering with zero tickets";
 
   // Should not be able to query data
   auto retrieved = blackboard.queryData(producer_name);
-  EXPECT_EQ(retrieved, nullptr) << "Should not be able to query data with zero tickets";
-
-  retrieved = blackboard.queryData(id);
   EXPECT_EQ(retrieved, nullptr) << "Should not be able to query data with zero tickets";
 }
 
@@ -201,7 +199,8 @@ TEST_F(CudaBlackboardTest, OneTicketIsZeroCopy)
   EXPECT_NE(retrieved, nullptr) << "Should be able to query data with one ticket";
 
   auto retrieved_gpu_pointer = retrieved->data.get();
-  EXPECT_EQ(original_gpu_pointer, retrieved_gpu_pointer) << "Data should be zero-copy with one ticket";
+  EXPECT_EQ(original_gpu_pointer, retrieved_gpu_pointer)
+    << "Data should be zero-copy with one ticket";
 }
 
 }  // namespace cuda_blackboard

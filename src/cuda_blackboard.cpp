@@ -4,6 +4,7 @@
 #include <rclcpp/rclcpp.hpp>
 
 #include <iostream>
+#include <stdexcept>
 
 namespace cuda_blackboard
 {
@@ -27,6 +28,10 @@ template <typename T>
 uint64_t CudaBlackboard<T>::registerData(
   const std::string & producer_name, std::unique_ptr<const T> data, std::size_t tickets)
 {
+  if (tickets == 0) {
+    throw std::invalid_argument("At least one ticket is required to register data");
+  }
+
   std::lock_guard<std::mutex> lock(mutex_);
 
   std::mt19937_64 gen(rd_());
@@ -68,7 +73,12 @@ std::shared_ptr<const T> CudaBlackboard<T>::queryData(const std::string & produc
   if (it == producer_to_data_map_.end()) {
     return std::shared_ptr<const T>{};  // Indicate that the key was not found
   }
-  
+
+  assert(it->second->tickets_ > 0);
+  if (it->second->tickets_ == 0) {
+    throw std::logic_error("Ended up with an entry with zero tickets");
+  }
+
   it->second->tickets_--;
   auto data = it->second->data_ptr_;
 
@@ -94,6 +104,11 @@ std::shared_ptr<const T> CudaBlackboard<T>::queryData(uint64_t instance_id)
 
   if (it == instance_id_to_data_map_.end()) {
     return std::shared_ptr<const T>{};  // Indicate that the key was not found
+  }
+
+  assert(it->second->tickets_ > 0);
+  if (it->second->tickets_ == 0) {
+    throw std::logic_error("Ended up with an entry with zero tickets");
   }
 
   it->second->tickets_--;
