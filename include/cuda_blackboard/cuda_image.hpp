@@ -6,6 +6,7 @@
 
 #include <sensor_msgs/msg/image.hpp>
 
+#include <cstdint>
 #include <memory>
 
 namespace cuda_blackboard
