@@ -5,6 +5,7 @@
 
 #include <sensor_msgs/msg/point_cloud2.hpp>
 
+#include <cstdint>
 #include <memory>
 
 namespace cuda_blackboard
