@@ -2,7 +2,7 @@
 # https://github.com/autowarefoundation/sync-file-templates
 # To make changes, update the source repository and follow the guidelines in its README.
 
-name: pre-commit-optional
+name: spell-check-differential
 
 on:
   pull_request:
@@ -12,16 +12,16 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  pre-commit-optional:
+  spell-check-differential:
     runs-on: ubuntu-22.04
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
-      - name: Run pre-commit
-        uses: autowarefoundation/autoware-github-actions/pre-commit@v1
+      - name: Run spell-check
+        uses: autowarefoundation/autoware-github-actions/spell-check@v1
         with:
-          pre-commit-config: .pre-commit-config-optional.yaml
-          base-branch: origin/${{ github.base_ref }}
+          cspell-json-url: https://raw.githubusercontent.com/autowarefoundation/autoware-spell-check-dict/main/.cspell.json
+          dict-packages: |
+            https://github.com/autowarefoundation/autoware-spell-check-dict
+            https://github.com/tier4/cspell-dicts
