@@ -15,22 +15,16 @@ class CudaPointCloud2 : public sensor_msgs::msg::PointCloud2
 {
 public:
   using ros_type = sensor_msgs::msg::PointCloud2;
-  using SharedPtr =
-    std::shared_ptr<CudaPointCloud2>;
-  using ConstSharedPtr =
-    std::shared_ptr<CudaPointCloud2 const>;
+  using SharedPtr = std::shared_ptr<CudaPointCloud2>;
+  using ConstSharedPtr = std::shared_ptr<CudaPointCloud2 const>;
 
-  template<typename Deleter = std::default_delete<
-      CudaPointCloud2>>
-  using UniquePtrWithDeleter =
-    std::unique_ptr<CudaPointCloud2, Deleter>;
+  template <typename Deleter = std::default_delete<CudaPointCloud2>>
+  using UniquePtrWithDeleter = std::unique_ptr<CudaPointCloud2, Deleter>;
 
   using UniquePtr = UniquePtrWithDeleter<>;
 
-  template<typename Deleter = std::default_delete<
-      CudaPointCloud2>>
-  using ConstUniquePtrWithDeleter =
-    std::unique_ptr<CudaPointCloud2 const, Deleter>;
+  template <typename Deleter = std::default_delete<CudaPointCloud2>>
+  using ConstUniquePtrWithDeleter = std::unique_ptr<CudaPointCloud2 const, Deleter>;
   using ConstUniquePtr = ConstUniquePtrWithDeleter<>;
 
   CudaPointCloud2();

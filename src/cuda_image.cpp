@@ -16,7 +16,8 @@ CudaImage::CudaImage(const CudaImage & image) : sensor_msgs::msg::Image(image)
 
   data = make_unique<uint8_t[]>(image.height * image.step * sizeof(uint8_t));
   cudaMemcpy(
-    data.get(), image.data.get(), image.height * image.step * sizeof(uint8_t), cudaMemcpyDeviceToDevice);
+    data.get(), image.data.get(), image.height * image.step * sizeof(uint8_t),
+    cudaMemcpyDeviceToDevice);
 }
 
 CudaImage::CudaImage(const sensor_msgs::msg::Image & source)

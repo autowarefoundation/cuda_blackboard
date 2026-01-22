@@ -55,7 +55,8 @@ CudaPointCloud2::CudaPointCloud2(const CudaPointCloud2 & pointcloud)
     "CudaPointCloud2 copy constructor called. This should be avoided and is most likely a design "
     "error.");
 
-  data = make_unique<uint8_t[]>(pointcloud.height * pointcloud.width * pointcloud.point_step * sizeof(uint8_t));
+  data = make_unique<uint8_t[]>(
+    pointcloud.height * pointcloud.width * pointcloud.point_step * sizeof(uint8_t));
   cudaMemcpy(
     data.get(), pointcloud.data.get(),
     pointcloud.height * pointcloud.width * pointcloud.point_step * sizeof(uint8_t),
@@ -75,8 +76,8 @@ CudaPointCloud2::CudaPointCloud2(const sensor_msgs::msg::PointCloud2 & source)
 
   data = make_unique<uint8_t[]>(source.height * source.width * source.point_step * sizeof(uint8_t));
   cudaMemcpy(
-    data.get(), source.data.data(), source.height * source.width * source.point_step * sizeof(uint8_t),
-    cudaMemcpyHostToDevice);
+    data.get(), source.data.data(),
+    source.height * source.width * source.point_step * sizeof(uint8_t), cudaMemcpyHostToDevice);
 }
 
 CudaPointCloud2::~CudaPointCloud2()
