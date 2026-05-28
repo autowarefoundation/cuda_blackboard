@@ -41,8 +41,7 @@ void CudaBlackboardPublisher<T>::publish(std::unique_ptr<const T> cuda_msg_ptr)
 }
 
 template <typename T>
-void CudaBlackboardPublisher<T>::publish(
-  std::unique_ptr<const T> cuda_msg_ptr, cudaStream_t stream)
+void CudaBlackboardPublisher<T>::publish(std::unique_ptr<const T> cuda_msg_ptr, cudaStream_t stream)
 {
   publishImpl(std::move(cuda_msg_ptr), stream);
 }
