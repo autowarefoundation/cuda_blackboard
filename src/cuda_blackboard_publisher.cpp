@@ -37,6 +37,20 @@ CudaBlackboardPublisher<T>::CudaBlackboardPublisher(
 template <typename T>
 void CudaBlackboardPublisher<T>::publish(std::unique_ptr<const T> cuda_msg_ptr)
 {
+  publishImpl(std::move(cuda_msg_ptr), nullptr);
+}
+
+template <typename T>
+void CudaBlackboardPublisher<T>::publish(
+  std::unique_ptr<const T> cuda_msg_ptr, cudaStream_t stream)
+{
+  publishImpl(std::move(cuda_msg_ptr), stream);
+}
+
+template <typename T>
+void CudaBlackboardPublisher<T>::publishImpl(
+  std::unique_ptr<const T> cuda_msg_ptr, cudaStream_t stream)
+{
   auto & map = negotiated_pub_->get_supported_types();
 
   using ROSMessageType = typename NegotiationStruct<T>::MsgT;
@@ -66,9 +80,20 @@ void CudaBlackboardPublisher<T>::publish(std::unique_ptr<const T> cuda_msg_ptr)
       tickets++;
     }
 
+    // Record (on the producer stream) that the buffer is filled. Subscribers
+    // wait on this event from their own stream, so no host synchronization is
+    // needed to order the consumer reads after the producer's fill. The event
+    // is owned by the blackboard entry and destroyed when the buffer is freed.
+    cudaEvent_t ready_event = nullptr;
+    if (stream != nullptr) {
+      CUDA_BLACKBOARD_CHECK_CUDA_ERROR(
+        ::cudaEventCreateWithFlags(&ready_event, cudaEventDisableTiming));
+      CUDA_BLACKBOARD_CHECK_CUDA_ERROR(::cudaEventRecord(ready_event, stream));
+    }
+
     instance_id = blackboard.registerData(
       std::string(node_.get_fully_qualified_name()) + "_" + publisher->get_topic_name(),
-      std::move(cuda_msg_ptr), tickets);
+      std::move(cuda_msg_ptr), tickets, ready_event);
 
     RCLCPP_DEBUG(
       node_.get_logger(), "Publishing instance id %lu with %ld tickets", instance_id, tickets);
@@ -77,6 +102,11 @@ void CudaBlackboardPublisher<T>::publish(std::unique_ptr<const T> cuda_msg_ptr)
     instance_msg.data = static_cast<uint64_t>(instance_id);
     negotiated_pub_->publish<NegotiationStruct<T>>(instance_msg);
   } else if (publish_ros_msg) {
+    // The (synchronous) type adaptation copies the buffer device-to-host on the
+    // default stream, so ensure the producer's async fill has completed first.
+    if (stream != nullptr) {
+      CUDA_BLACKBOARD_CHECK_CUDA_ERROR(::cudaStreamSynchronize(stream));
+    }
     auto ros_msg_ptr = std::make_unique<typename T::ros_type>();
     rclcpp::TypeAdapter<T>::convert_to_ros_message(*cuda_msg_ptr, *ros_msg_ptr);
 
@@ -85,6 +115,9 @@ void CudaBlackboardPublisher<T>::publish(std::unique_ptr<const T> cuda_msg_ptr)
 
   // When we want to publish ros data, we need to use type adaptation
   if (publish_blackboard_msg && publish_ros_msg) {
+    if (stream != nullptr) {
+      CUDA_BLACKBOARD_CHECK_CUDA_ERROR(::cudaStreamSynchronize(stream));
+    }
     auto data = blackboard.queryData(instance_id);
     auto ros_msg_ptr = std::make_unique<typename T::ros_type>();
     rclcpp::TypeAdapter<T>::convert_to_ros_message(*data, *ros_msg_ptr);

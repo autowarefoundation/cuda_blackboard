@@ -45,9 +45,47 @@ void cuda_check_error(const ::cudaError_t e, F && f, N && n)
   }
 }
 
+// Deleter for device memory. By default it frees synchronously with cudaFree
+// (which implicitly synchronizes the whole device). When constructed with a
+// stream it instead frees with cudaFreeAsync on that stream, so the free is
+// ordered on the stream rather than stalling the device.
+//
+// The deleter keeps the same type regardless of mode, so CudaUniquePtr<T> (and
+// therefore every member that uses it, e.g. CudaPointCloud2::data) is unchanged
+// and existing code remains source-compatible.
+//
+// The free stream can be re-targeted after construction with set_stream(). This
+// is what lets a buffer allocated on the producer stream be freed on a
+// consumer's stream instead (ordering the free after that consumer's reads).
+// set_stream() is const and the stream is mutable on purpose: the free stream
+// is resource-reclamation plumbing, not part of the buffer's value, so it is
+// settable even through a unique_ptr owned by a shared_ptr<const T>.
 struct CudaDeleter
 {
-  void operator()(void * p) const { CUDA_BLACKBOARD_CHECK_CUDA_ERROR(::cudaFree(p)); }
+  CudaDeleter() = default;
+  explicit CudaDeleter(cudaStream_t stream) : stream_(stream), async_(true) {}
+
+  void operator()(void * p) const
+  {
+    if (async_) {
+      CUDA_BLACKBOARD_CHECK_CUDA_ERROR(::cudaFreeAsync(p, stream_));
+    } else {
+      CUDA_BLACKBOARD_CHECK_CUDA_ERROR(::cudaFree(p));
+    }
+  }
+
+  // Re-target the stream the buffer will be freed on. No effect for a
+  // synchronously allocated buffer (one not created via the stream-aware
+  // make_unique), which must keep its cudaFree path.
+  void set_stream(cudaStream_t stream) const
+  {
+    if (async_) {
+      stream_ = stream;
+    }
+  }
+
+  mutable cudaStream_t stream_{nullptr};
+  bool async_{false};
 };
 template <typename T>
 using CudaUniquePtr = std::unique_ptr<T, CudaDeleter>;
@@ -68,6 +106,31 @@ CudaUniquePtr<T> make_unique()
   T * p;
   CUDA_BLACKBOARD_CHECK_CUDA_ERROR(::cudaMalloc(reinterpret_cast<void **>(&p), sizeof(T)));
   return CudaUniquePtr<T>{p};
+}
+
+// Stream-ordered allocations: the memory is allocated with cudaMallocAsync on
+// the given stream and the returned pointer carries a deleter that frees it
+// with cudaFreeAsync on the same stream. Requires CUDA >= 11.2 with memory-pool
+// support (cudaDevAttrMemoryPoolsSupported).
+template <typename T>
+typename std::enable_if_t<std::is_array<T>::value, CudaUniquePtr<T>> make_unique(
+  const std::size_t n, cudaStream_t stream)
+{
+  using U = typename std::remove_extent_t<T>;
+  U * p;
+  CUDA_BLACKBOARD_CHECK_CUDA_ERROR(
+    ::cudaMallocAsync(reinterpret_cast<void **>(&p), sizeof(U) * n, stream));
+  return CudaUniquePtr<T>{p, CudaDeleter{stream}};
+}
+
+template <typename T>
+typename std::enable_if_t<!std::is_array<T>::value, CudaUniquePtr<T>> make_unique(
+  cudaStream_t stream)
+{
+  T * p;
+  CUDA_BLACKBOARD_CHECK_CUDA_ERROR(
+    ::cudaMallocAsync(reinterpret_cast<void **>(&p), sizeof(T), stream));
+  return CudaUniquePtr<T>{p, CudaDeleter{stream}};
 }
 
 struct HostDeleter

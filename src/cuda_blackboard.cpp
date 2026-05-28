@@ -17,7 +17,8 @@ CudaBlackboard<T> & CudaBlackboard<T>::getInstance()
 
 template <typename T>
 uint64_t CudaBlackboard<T>::registerData(
-  const std::string & producer_name, std::unique_ptr<const T> data, std::size_t tickets)
+  const std::string & producer_name, std::unique_ptr<const T> data, std::size_t tickets,
+  cudaEvent_t ready_event)
 {
   std::lock_guard<std::mutex> lock(mutex_);
 
@@ -31,7 +32,7 @@ uint64_t CudaBlackboard<T>::registerData(
 
   std::shared_ptr<CudaBlackboardDataWrapper<T>> data_wrapper =
     std::make_shared<CudaBlackboardDataWrapper<T>>(
-      std::move(data), producer_name, instance_id, tickets);
+      std::move(data), producer_name, instance_id, tickets, ready_event);
 
   if (producer_to_data_map_.count(producer_name) > 0) {
     RCLCPP_WARN_STREAM(
@@ -58,17 +59,21 @@ std::shared_ptr<const T> CudaBlackboard<T>::queryData(const std::string & produc
   auto it = producer_to_data_map_.find(producer_name);
 
   if (it != producer_to_data_map_.end()) {
-    it->second->tickets_--;
-    auto data = it->second->data_ptr_;
+    auto wrapper = it->second;  // keep the wrapper alive across the map erase below
+    wrapper->tickets_--;
+
+    // Aliasing shared_ptr: returns the buffer but co-owns the wrapper, so the
+    // wrapper (and its ready event) outlives every consumer that holds the data.
+    std::shared_ptr<const T> data(wrapper, wrapper->data_ptr_.get());
 
     RCLCPP_DEBUG_STREAM(
       rclcpp::get_logger("CudaBlackboard"),
-      "Producer " << producer_name << " has " << it->second->tickets_ << " tickets left");
+      "Producer " << producer_name << " has " << wrapper->tickets_ << " tickets left");
 
-    if (it->second->tickets_ == 0) {
+    if (wrapper->tickets_ == 0) {
       RCLCPP_DEBUG_STREAM(
         rclcpp::get_logger("CudaBlackboard"), "Removing data from producer " << producer_name);
-      instance_id_to_data_map_.erase(it->second->instance_id_);
+      instance_id_to_data_map_.erase(wrapper->instance_id_);
       producer_to_data_map_.erase(it);
     }
 
@@ -78,23 +83,32 @@ std::shared_ptr<const T> CudaBlackboard<T>::queryData(const std::string & produc
 }
 
 template <typename T>
-std::shared_ptr<const T> CudaBlackboard<T>::queryData(uint64_t instance_id)
+std::shared_ptr<const T> CudaBlackboard<T>::queryData(
+  uint64_t instance_id, cudaEvent_t * ready_event_out)
 {
   std::lock_guard<std::mutex> lock(mutex_);
   auto it = instance_id_to_data_map_.find(instance_id);
 
   if (it != instance_id_to_data_map_.end()) {
-    it->second->tickets_--;
-    std::shared_ptr<const T> data = it->second->data_ptr_;
+    auto wrapper = it->second;  // keep the wrapper alive across the map erase below
+    wrapper->tickets_--;
+
+    if (ready_event_out != nullptr) {
+      *ready_event_out = wrapper->ready_event_;
+    }
+
+    // Aliasing shared_ptr: returns the buffer but co-owns the wrapper, so the
+    // wrapper (and its ready event) outlives every consumer that holds the data.
+    std::shared_ptr<const T> data(wrapper, wrapper->data_ptr_.get());
 
     RCLCPP_DEBUG_STREAM(
       rclcpp::get_logger("CudaBlackboard"),
-      "Instance " << instance_id << " has " << it->second->tickets_ << " tickets left");
+      "Instance " << instance_id << " has " << wrapper->tickets_ << " tickets left");
 
-    if (it->second->tickets_ == 0) {
+    if (wrapper->tickets_ == 0) {
       RCLCPP_DEBUG_STREAM(
         rclcpp::get_logger("CudaBlackboard"), "Removing data from instance " << instance_id);
-      producer_to_data_map_.erase(it->second->producer_name_);
+      producer_to_data_map_.erase(wrapper->producer_name_);
       instance_id_to_data_map_.erase(it);
     }
 
