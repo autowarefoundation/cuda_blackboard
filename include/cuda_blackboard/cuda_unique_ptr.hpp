@@ -21,6 +21,7 @@
 #define CUDA_BLACKBOARD__CUDA_UNIQUE_PTR_HPP_
 
 #include "cuda_blackboard/cuda_error.hpp"
+#include "cuda_blackboard/cuda_mem_pool_context.hpp"
 
 #include <cuda_runtime.h>
 #include <cuda_runtime_api.h>
@@ -35,8 +36,23 @@ namespace cuda_blackboard
 
 struct CudaDeleter
 {
-  void operator()(void * p) const { CUDA_BLACKBOARD_CHECK_CUDA_ERROR(::cudaFree(p)); }
+  cudaStream_t stream{nullptr};
+
+  void operator()(void * p) const
+  {
+    if (p == nullptr) {
+      return;
+    }
+
+    if (stream != nullptr) {
+      CUDA_BLACKBOARD_CHECK_CUDA_ERROR(::cudaFreeAsync(p, stream));
+    } else {
+      CUDA_BLACKBOARD_CHECK_CUDA_ERROR(::cudaFree(p));
+    }
+    p = nullptr;
+  }
 };
+
 template <typename T>
 using CudaUniquePtr = std::unique_ptr<T, CudaDeleter>;
 
@@ -45,17 +61,49 @@ typename std::enable_if_t<std::is_array<T>::value, CudaUniquePtr<T>> make_unique
   const std::size_t n)
 {
   using U = typename std::remove_extent_t<T>;
+  auto & mem_pool_ctx = CudaMemPoolContext::getInstance();
+
   U * p;
-  CUDA_BLACKBOARD_CHECK_CUDA_ERROR(::cudaMalloc(reinterpret_cast<void **>(&p), sizeof(U) * n));
-  return CudaUniquePtr<T>{p};
+  CUDA_BLACKBOARD_CHECK_CUDA_ERROR(::cudaMallocFromPoolAsync(
+    reinterpret_cast<void **>(&p), sizeof(U) * n, mem_pool_ctx.pool(), mem_pool_ctx.stream()));
+
+  // To prevent unexpected behavior caused by dirty region allocated by the pool,
+  // zero clear the taken region
+  CUDA_BLACKBOARD_CHECK_CUDA_ERROR(::cudaMemsetAsync(p, 0, sizeof(U) * n, mem_pool_ctx.stream()));
+
+  // Wait until requested memory available
+  cudaEvent_t local_wait_event;
+  CUDA_BLACKBOARD_CHECK_CUDA_ERROR(
+    cudaEventCreateWithFlags(&local_wait_event, cudaEventDisableTiming));
+  CUDA_BLACKBOARD_CHECK_CUDA_ERROR(cudaEventRecord(local_wait_event, mem_pool_ctx.stream()));
+  CUDA_BLACKBOARD_CHECK_CUDA_ERROR(cudaEventSynchronize(local_wait_event));
+  CUDA_BLACKBOARD_CHECK_CUDA_ERROR(cudaEventDestroy(local_wait_event));
+
+  return CudaUniquePtr<T>{p, CudaDeleter{mem_pool_ctx.stream()}};
 }
 
 template <typename T>
 CudaUniquePtr<T> make_unique()
 {
   T * p;
-  CUDA_BLACKBOARD_CHECK_CUDA_ERROR(::cudaMalloc(reinterpret_cast<void **>(&p), sizeof(T)));
-  return CudaUniquePtr<T>{p};
+  auto & mem_pool_ctx = CudaMemPoolContext::getInstance();
+
+  CUDA_BLACKBOARD_CHECK_CUDA_ERROR(::cudaMallocFromPoolAsync(
+    reinterpret_cast<void **>(&p), sizeof(T), mem_pool_ctx.pool(), mem_pool_ctx.stream()));
+
+  // To prevent unexpected behavior caused by dirty region allocated by the pool,
+  // zero clear the taken region
+  CUDA_BLACKBOARD_CHECK_CUDA_ERROR(::cudaMemsetAsync(p, 0, sizeof(T), mem_pool_ctx.stream()));
+
+  // Wait until requested memory available
+  cudaEvent_t local_wait_event;
+  CUDA_BLACKBOARD_CHECK_CUDA_ERROR(
+    cudaEventCreateWithFlags(&local_wait_event, cudaEventDisableTiming));
+  CUDA_BLACKBOARD_CHECK_CUDA_ERROR(cudaEventRecord(local_wait_event, mem_pool_ctx.stream()));
+  CUDA_BLACKBOARD_CHECK_CUDA_ERROR(cudaEventSynchronize(local_wait_event));
+  CUDA_BLACKBOARD_CHECK_CUDA_ERROR(cudaEventDestroy(local_wait_event));
+
+  return CudaUniquePtr<T>{p, CudaDeleter{mem_pool_ctx.stream()}};
 }
 
 struct HostDeleter

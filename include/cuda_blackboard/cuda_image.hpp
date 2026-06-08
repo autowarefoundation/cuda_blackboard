@@ -28,7 +28,7 @@ public:
   using ConstUniquePtrWithDeleter = std::unique_ptr<CudaImage const, Deleter>;
   using ConstUniquePtr = ConstUniquePtrWithDeleter<>;
 
-  CudaImage() = default;
+  CudaImage();
   CudaImage(const CudaImage & image);  // This is needed for ROS compliance
   CudaImage & operator=(const CudaImage &) = delete;
   CudaImage(CudaImage && image) = default;
@@ -37,7 +37,13 @@ public:
 
   ~CudaImage();
 
+  cudaEvent_t & ready_event() { return *ready_event_; }
+  cudaEvent_t ready_event() const { return *ready_event_; }
+
   CudaUniquePtr<std::uint8_t[]> data;
+
+private:
+  std::unique_ptr<cudaEvent_t> ready_event_;
 };
 
 }  // namespace cuda_blackboard

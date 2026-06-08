@@ -8,7 +8,9 @@
 #include <mutex>
 #include <random>
 #include <string>
+#include <type_traits>
 #include <unordered_map>
+#include <utility>
 
 namespace cuda_blackboard
 {
@@ -54,6 +56,17 @@ private:
   CudaBlackboard & operator=(const CudaBlackboard &) = delete;
 
   std::random_device rd_;
+};
+
+// Traits to detect if a class has "ready_event()" as a menber
+template <class, class = void>
+struct has_ready_event : std::false_type
+{
+};
+
+template <class T>
+struct has_ready_event<T, std::void_t<decltype(std::declval<T>().ready_event())>> : std::true_type
+{
 };
 
 }  // namespace cuda_blackboard

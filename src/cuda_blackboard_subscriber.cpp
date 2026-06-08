@@ -2,6 +2,7 @@
 #include "cuda_blackboard/cuda_blackboard_subscriber.hpp"
 
 #include "cuda_blackboard/cuda_blackboard.hpp"
+#include "cuda_blackboard/cuda_error.hpp"
 #include "cuda_blackboard/negotiated_types.hpp"
 
 #include <functional>
@@ -92,6 +93,9 @@ void CudaBlackboardSubscriber<T>::instanceIdCallback(const std_msgs::msg::UInt64
   auto & blackboard = CudaBlackboard<T>::getInstance();
   auto data = blackboard.queryData(instance_id_msg.data);
   if (data) {
+    static_assert(has_ready_event<T>::value, "T must expose ready_event())");
+    CUDA_BLACKBOARD_CHECK_CUDA_ERROR(cudaEventSynchronize(data->ready_event()));
+
     callback_(data);
   } else {
     RCLCPP_ERROR_STREAM(
