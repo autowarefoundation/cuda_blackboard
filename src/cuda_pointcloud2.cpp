@@ -14,8 +14,6 @@ namespace cuda_blackboard
 
 CudaPointCloud2::CudaPointCloud2()
 {
-  ready_event_ = std::make_unique<cudaEvent_t>();
-
   // NOTE: `cudaEventBlockingSync` flag is not set here so that cudaEventSynchronize()
   // will busy-wait until the event has been completed
   CUDA_BLACKBOARD_CHECK_CUDA_ERROR(
@@ -70,8 +68,6 @@ CudaPointCloud2::CudaPointCloud2(const CudaPointCloud2 & pointcloud)
 
   auto & ctx = CudaMemPoolContext::getInstance();
 
-  ready_event_ = std::make_unique<cudaEvent_t>();
-
   // NOTE: `cudaEventBlockingSync` flag is not set here so that cudaEventSynchronize()
   // will busy-wait until the event has been completed
   CUDA_BLACKBOARD_CHECK_CUDA_ERROR(
@@ -99,8 +95,6 @@ CudaPointCloud2::CudaPointCloud2(const sensor_msgs::msg::PointCloud2 & source)
   is_bigendian = source.is_bigendian;
 
   auto & ctx = CudaMemPoolContext::getInstance();
-
-  ready_event_ = std::make_unique<cudaEvent_t>();
 
   // NOTE: `cudaEventBlockingSync` flag is not set here so that cudaEventSynchronize()
   // will busy-wait until the event has been completed

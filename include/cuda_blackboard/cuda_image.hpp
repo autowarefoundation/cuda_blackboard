@@ -37,13 +37,13 @@ public:
 
   ~CudaImage();
 
-  cudaEvent_t & ready_event() { return *ready_event_; }
-  const cudaEvent_t & ready_event() const { return *ready_event_; }
+  cudaEvent_t & ready_event() { return ready_event_; }
+  const cudaEvent_t & ready_event() const { return ready_event_; }
 
   CudaUniquePtr<std::uint8_t[]> data;
 
 private:
-  std::unique_ptr<cudaEvent_t> ready_event_;
+  cudaEvent_t ready_event_;
 };
 
 }  // namespace cuda_blackboard

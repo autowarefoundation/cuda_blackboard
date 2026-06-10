@@ -14,8 +14,6 @@ namespace cuda_blackboard
 {
 CudaImage::CudaImage()
 {
-  ready_event_ = std::make_unique<cudaEvent_t>();
-
   // NOTE: `cudaEventBlockingSync` flag is not set here so that cudaEventSynchronize()
   // will busy-wait until the event has been completed
   CUDA_BLACKBOARD_CHECK_CUDA_ERROR(
@@ -29,8 +27,6 @@ CudaImage::CudaImage(const CudaImage & image) : sensor_msgs::msg::Image(image)
     "CudaImage copy constructor called. This should be avoided and is most likely a design error.");
 
   auto & ctx = CudaMemPoolContext::getInstance();
-
-  ready_event_ = std::make_unique<cudaEvent_t>();
 
   // NOTE: `cudaEventBlockingSync` flag is not set here so that cudaEventSynchronize()
   // will busy-wait until the event has been completed
@@ -55,8 +51,6 @@ CudaImage::CudaImage(const sensor_msgs::msg::Image & source)
   is_bigendian = source.is_bigendian;
 
   auto & ctx = CudaMemPoolContext::getInstance();
-
-  ready_event_ = std::make_unique<cudaEvent_t>();
 
   // NOTE: `cudaEventBlockingSync` flag is not set here so that cudaEventSynchronize()
   // will busy-wait until the event has been completed
