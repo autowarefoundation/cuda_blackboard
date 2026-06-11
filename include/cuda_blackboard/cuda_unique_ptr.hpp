@@ -79,7 +79,8 @@ typename std::enable_if_t<std::is_array<T>::value, CudaUniquePtr<T>> make_unique
   CUDA_BLACKBOARD_CHECK_CUDA_ERROR(cudaEventSynchronize(local_wait_event));
   CUDA_BLACKBOARD_CHECK_CUDA_ERROR(cudaEventDestroy(local_wait_event));
 
-  return CudaUniquePtr<T>{p, CudaDeleter{mem_pool_ctx.stream()}};
+  // Free on the dedicated free_stream() — see the invariant on CudaMemPoolContext::free_stream().
+  return CudaUniquePtr<T>{p, CudaDeleter{mem_pool_ctx.free_stream()}};
 }
 
 template <typename T>
@@ -103,7 +104,8 @@ CudaUniquePtr<T> make_unique()
   CUDA_BLACKBOARD_CHECK_CUDA_ERROR(cudaEventSynchronize(local_wait_event));
   CUDA_BLACKBOARD_CHECK_CUDA_ERROR(cudaEventDestroy(local_wait_event));
 
-  return CudaUniquePtr<T>{p, CudaDeleter{mem_pool_ctx.stream()}};
+  // Free on the dedicated free_stream() — see the invariant on CudaMemPoolContext::free_stream().
+  return CudaUniquePtr<T>{p, CudaDeleter{mem_pool_ctx.free_stream()}};
 }
 
 struct HostDeleter

@@ -3,7 +3,10 @@
 
 #include "cuda_blackboard/cuda_blackboard.hpp"
 #include "cuda_blackboard/cuda_error.hpp"
+#include "cuda_blackboard/cuda_mem_pool_context.hpp"
 #include "cuda_blackboard/negotiated_types.hpp"
+
+#include <rclcpp/rclcpp.hpp>
 
 #include <functional>
 
@@ -13,10 +16,25 @@ namespace cuda_blackboard
 template <typename T>
 CudaBlackboardSubscriber<T>::CudaBlackboardSubscriber(
   rclcpp::Node & node, const std::string & topic_name, [[maybe_unused]] bool add_compatible_sub,
-  std::function<void(std::shared_ptr<const T>)> callback)
-: node_(node)
+  std::function<void(std::shared_ptr<const T>)> callback, cudaStream_t user_stream)
+: node_(node), user_stream_(user_stream)
 {
   using std::placeholders::_1;
+
+  if (needFallbackToLegacyDefaultStream(user_stream_)) {
+    RCLCPP_WARN_STREAM(
+      node_.get_logger(),
+      "`user_stream` was not set or the legacy default stream was specified for the "
+      "CudaBlackboardSubscriber of "
+        << topic_name
+        << ". This causes process-wide synchronization after the callback executes, which may "
+           "degrade performance. Moreover, if the subscribed data is consumed on a CUDA stream "
+           "created with the `cudaStreamNonBlocking` flag, this may cause a use-after-free of the "
+           "pointer. To avoid this, consider the following:"
+        << std::endl
+        << "  - pass the stream to the CudaBlackboardSubscriber's constructor, and/or " << std::endl
+        << "  - perform proper synchronization on the stream in the callback");
+  }
 
   negotiated::NegotiatedSubscriptionOptions negotiation_options;
   negotiation_options.disconnect_on_negotiation_failure = false;
@@ -46,10 +64,25 @@ CudaBlackboardSubscriber<T>::CudaBlackboardSubscriber(
 template <typename T>
 CudaBlackboardSubscriber<T>::CudaBlackboardSubscriber(
   rclcpp::Node & node, const std::string & topic_name,
-  std::function<void(std::shared_ptr<const T>)> callback)
-: node_(node)
+  std::function<void(std::shared_ptr<const T>)> callback, cudaStream_t user_stream)
+: node_(node), user_stream_(user_stream)
 {
   using std::placeholders::_1;
+
+  if (needFallbackToLegacyDefaultStream(user_stream_)) {
+    RCLCPP_WARN_STREAM(
+      node_.get_logger(),
+      "`user_stream` was not set or the legacy default stream was specified for the "
+      "CudaBlackboardSubscriber of "
+        << topic_name
+        << ". This causes process-wide synchronization after the callback executes, which may "
+           "degrade performance. Moreover, if the subscribed data is consumed on a CUDA stream "
+           "created with the `cudaStreamNonBlocking` flag, this may cause a use-after-free of the "
+           "pointer. To avoid this, consider the following:"
+        << std::endl
+        << "  - pass the stream to the CudaBlackboardSubscriber's constructor, and/or " << std::endl
+        << "  - perform proper synchronization on the stream in the callback");
+  }
 
   negotiated::NegotiatedSubscriptionOptions negotiation_options;
   negotiation_options.disconnect_on_negotiation_failure = false;
@@ -94,9 +127,13 @@ void CudaBlackboardSubscriber<T>::instanceIdCallback(const std_msgs::msg::UInt64
   auto data = blackboard.queryData(instance_id_msg.data);
   if (data) {
     static_assert(has_ready_event<T>::value, "T must expose ready_event())");
-    CUDA_BLACKBOARD_CHECK_CUDA_ERROR(cudaEventSynchronize(data->ready_event()));
+    CUDA_BLACKBOARD_CHECK_CUDA_ERROR(
+      cudaStreamWaitEvent(user_stream_, data->ready_event(), cudaEventWaitDefault));
 
     callback_(data);
+
+    // Make the free stream wait until the consumer is done with `data` before it is freed.
+    addConsumerDependencyToFreeStream();
   } else {
     RCLCPP_ERROR_STREAM(
       node_.get_logger(), "There was not data with the requested instance id= "
@@ -121,12 +158,54 @@ void CudaBlackboardSubscriber<T>::compatibleCallback(
 
     return;
   }
+  auto cuda_msg_ptr = std::make_shared<T>(*ros_msg_ptr);
+  static_assert(has_ready_event<T>::value, "T must expose ready_event())");
+  CUDA_BLACKBOARD_CHECK_CUDA_ERROR(
+    cudaStreamWaitEvent(user_stream_, cuda_msg_ptr->ready_event(), cudaEventWaitDefault));
 
   RCLCPP_WARN_ONCE(
     node_.get_logger(),
     "The compatible callback was called. This results in a performance loss. This behavior is "
     "probably not intended or a temporal measure");
-  callback_(std::make_shared<T>(*ros_msg_ptr));
+  callback_(cuda_msg_ptr);
+
+  // Make the free stream wait until the consumer is done with the message before it is freed.
+  addConsumerDependencyToFreeStream();
+}
+
+template <typename T>
+void CudaBlackboardSubscriber<T>::addConsumerDependencyToFreeStream() const
+{
+  // Records an event on the consumer stream (`user_stream_`, or the legacy default stream as a
+  // fallback) and makes `free_stream()` wait on it. Call this right after `callback_` returns,
+  // while the message is still alive, so the `cudaFreeAsync` issued by `CudaDeleter` (which runs on
+  // the same `free_stream()`) is ordered strictly after consumption. See
+  // CudaMemPoolContext::free_stream() for why the two streams must match.
+  //
+  // NOTE: the legacy-default-stream fallback does not work when all of the following hold:
+  // - the data is consumed in `callback_` on a stream created with the `cudaStreamNonBlocking`
+  //   flag, AND
+  // - no proper stream synchronization is performed in the callback, AND
+  // - that stream is not passed as the `user_stream` argument of the constructor.
+  // Such a non-blocking stream does not synchronize with the legacy default stream, so the event
+  // recorded here cannot capture the consumption and the memory may be freed too early.
+  const cudaStream_t record_stream =
+    needFallbackToLegacyDefaultStream(user_stream_) ? cudaStreamLegacy : user_stream_;
+  auto & ctx = CudaMemPoolContext::getInstance();
+  cudaEvent_t event;
+  CUDA_BLACKBOARD_CHECK_CUDA_ERROR(cudaEventCreateWithFlags(&event, cudaEventDisableTiming));
+  CUDA_BLACKBOARD_CHECK_CUDA_ERROR(cudaEventRecord(event, record_stream));
+  CUDA_BLACKBOARD_CHECK_CUDA_ERROR(
+    cudaStreamWaitEvent(ctx.free_stream(), event, cudaEventWaitDefault));
+  CUDA_BLACKBOARD_CHECK_CUDA_ERROR(cudaEventDestroy(event));
+}
+
+template <typename T>
+inline bool CudaBlackboardSubscriber<T>::needFallbackToLegacyDefaultStream(
+  const cudaStream_t & stream) const
+
+{
+  return (stream == nullptr) || (stream == cudaStreamLegacy);
 }
 
 }  // namespace cuda_blackboard

@@ -68,7 +68,8 @@ CudaImage::CudaImage(const sensor_msgs::msg::Image & source)
 CudaImage::~CudaImage()
 {
   if (ready_event_) {
-    cudaEventSynchronize(ready_event());
+    auto & ctx = CudaMemPoolContext::getInstance();
+    cudaStreamWaitEvent(ctx.free_stream(), ready_event(), cudaEventWaitDefault);
     cudaEventDestroy(ready_event());
   }
 }

@@ -113,7 +113,8 @@ CudaPointCloud2::CudaPointCloud2(const sensor_msgs::msg::PointCloud2 & source)
 CudaPointCloud2::~CudaPointCloud2()
 {
   if (ready_event_) {
-    cudaEventSynchronize(ready_event());
+    auto & ctx = CudaMemPoolContext::getInstance();
+    cudaStreamWaitEvent(ctx.free_stream(), ready_event(), cudaEventWaitDefault);
     cudaEventDestroy(ready_event());
   }
 }
