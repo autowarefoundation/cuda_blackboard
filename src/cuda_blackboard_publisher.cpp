@@ -66,6 +66,14 @@ void CudaBlackboardPublisher<T>::publish(std::unique_ptr<const T> cuda_msg_ptr)
       tickets++;
     }
 
+    // TODO: Once CudaBlackboardPublisher accepts a `user_stream`, record the buffer's
+    // ready_event on it here (before the std::move below), e.g.
+    // `cudaEventRecord(cuda_msg_ptr->ready_event(), user_stream_)`.
+    // This is the producer-side mirror of the consumer ordering in CudaBlackboardSubscriber: it
+    // lets a subscriber wait on ready_event (via cudaStreamWaitEvent) until the producer's stream
+    // work is actually done, so correctness no longer relies on the producer synchronizing its
+    // stream inside the data-producer callback before publishing.
+
     instance_id = blackboard.registerData(
       std::string(node_.get_fully_qualified_name()) + "_" + publisher->get_topic_name(),
       std::move(cuda_msg_ptr), tickets);
