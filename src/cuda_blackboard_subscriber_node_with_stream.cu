@@ -19,8 +19,8 @@
 namespace
 {
 __global__ void dummy_copy_kernel(
-  uint8_t * __restrict__ src, uint8_t * __restrict__ dest, const size_t width, const size_t height,
-  const size_t step)
+  const uint8_t * __restrict__ src, uint8_t * __restrict__ dest, const size_t width,
+  const size_t height, const size_t step)
 {
   auto x = blockIdx.x * blockDim.x + threadIdx.x;
   auto y = blockIdx.y * blockDim.y + threadIdx.y;
@@ -39,7 +39,7 @@ class CudaBlackboardSubscriberNodeWithStream final : public rclcpp::Node
 {
 public:
   explicit CudaBlackboardSubscriberNodeWithStream(const rclcpp::NodeOptions & options)
-  : rclcpp::Node("cuda_blackboard_subscriber_node", options)
+  : rclcpp::Node("cuda_blackboard_subscriber_node_with_stream", options)
   {
     CUDA_BLACKBOARD_CHECK_CUDA_ERROR(cudaStreamCreate(&stream_));
 
@@ -68,8 +68,14 @@ public:
     };
 
     // Pass user side stream to the CudaBlackboardSubscriber ctor
-    sub_ = std::make_shared<CudaBlackboardSubscriber<CudaImage>>(
-      *this, "image_raw", false, callback, stream_);
+    sub_ =
+      std::make_shared<CudaBlackboardSubscriber<CudaImage>>(*this, "image_raw", callback, stream_);
+  }
+
+  ~CudaBlackboardSubscriberNodeWithStream()
+  {
+    cudaStreamSynchronize(stream_);
+    cudaStreamDestroy(stream_);
   }
 
 private:
