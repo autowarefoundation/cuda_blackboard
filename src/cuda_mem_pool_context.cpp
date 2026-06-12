@@ -72,4 +72,14 @@ CudaMemPoolContext::~CudaMemPoolContext()
   }
 }
 
+void CudaMemPoolContext::blockCpuUntilStreamCompletion()
+{
+  cudaEvent_t local_wait_event;
+  CUDA_BLACKBOARD_CHECK_CUDA_ERROR(
+    cudaEventCreateWithFlags(&local_wait_event, cudaEventDisableTiming));
+  CUDA_BLACKBOARD_CHECK_CUDA_ERROR(cudaEventRecord(local_wait_event, stream_));
+  CUDA_BLACKBOARD_CHECK_CUDA_ERROR(cudaEventSynchronize(local_wait_event));
+  CUDA_BLACKBOARD_CHECK_CUDA_ERROR(cudaEventDestroy(local_wait_event));
+}
+
 }  // namespace cuda_blackboard

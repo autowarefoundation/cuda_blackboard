@@ -39,12 +39,7 @@ struct rclcpp::TypeAdapter<cuda_blackboard::CudaImage, sensor_msgs::msg::Image>
       cudaMemcpyDeviceToHost, ctx.stream()));
 
     // Block CPU thread until operation finishes
-    cudaEvent_t local_wait_event;
-    CUDA_BLACKBOARD_CHECK_CUDA_ERROR(
-      cudaEventCreateWithFlags(&local_wait_event, cudaEventDisableTiming));
-    CUDA_BLACKBOARD_CHECK_CUDA_ERROR(cudaEventRecord(local_wait_event, ctx.stream()));
-    CUDA_BLACKBOARD_CHECK_CUDA_ERROR(cudaEventSynchronize(local_wait_event));
-    CUDA_BLACKBOARD_CHECK_CUDA_ERROR(cudaEventDestroy(local_wait_event));
+    ctx.blockCpuUntilStreamCompletion();
   }
 
   static void convert_to_custom(const ros_message_type & source, custom_type & destination)
@@ -64,12 +59,7 @@ struct rclcpp::TypeAdapter<cuda_blackboard::CudaImage, sensor_msgs::msg::Image>
       cudaMemcpyHostToDevice, ctx.stream()));
 
     // Block CPU thread until operation finishes
-    cudaEvent_t local_wait_event;
-    CUDA_BLACKBOARD_CHECK_CUDA_ERROR(
-      cudaEventCreateWithFlags(&local_wait_event, cudaEventDisableTiming));
-    CUDA_BLACKBOARD_CHECK_CUDA_ERROR(cudaEventRecord(local_wait_event, ctx.stream()));
-    CUDA_BLACKBOARD_CHECK_CUDA_ERROR(cudaEventSynchronize(local_wait_event));
-    CUDA_BLACKBOARD_CHECK_CUDA_ERROR(cudaEventDestroy(local_wait_event));
+    ctx.blockCpuUntilStreamCompletion();
   }
 };
 
@@ -100,12 +90,7 @@ struct rclcpp::TypeAdapter<cuda_blackboard::CudaPointCloud2, sensor_msgs::msg::P
       ctx.stream()));
 
     // Block CPU thread until operation finishes
-    cudaEvent_t local_wait_event;
-    CUDA_BLACKBOARD_CHECK_CUDA_ERROR(
-      cudaEventCreateWithFlags(&local_wait_event, cudaEventDisableTiming));
-    CUDA_BLACKBOARD_CHECK_CUDA_ERROR(cudaEventRecord(local_wait_event, ctx.stream()));
-    CUDA_BLACKBOARD_CHECK_CUDA_ERROR(cudaEventSynchronize(local_wait_event));
-    CUDA_BLACKBOARD_CHECK_CUDA_ERROR(cudaEventDestroy(local_wait_event));
+    ctx.blockCpuUntilStreamCompletion();
   }
 
   static void convert_to_custom(const ros_message_type & source, custom_type & destination)
@@ -130,12 +115,7 @@ struct rclcpp::TypeAdapter<cuda_blackboard::CudaPointCloud2, sensor_msgs::msg::P
       ctx.stream()));
 
     // Block CPU thread until operation finishes
-    cudaEvent_t local_wait_event;
-    CUDA_BLACKBOARD_CHECK_CUDA_ERROR(
-      cudaEventCreateWithFlags(&local_wait_event, cudaEventDisableTiming));
-    CUDA_BLACKBOARD_CHECK_CUDA_ERROR(cudaEventRecord(local_wait_event, ctx.stream()));
-    CUDA_BLACKBOARD_CHECK_CUDA_ERROR(cudaEventSynchronize(local_wait_event));
-    CUDA_BLACKBOARD_CHECK_CUDA_ERROR(cudaEventDestroy(local_wait_event));
+    ctx.blockCpuUntilStreamCompletion();
   }
 };
 

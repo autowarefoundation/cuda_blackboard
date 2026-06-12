@@ -72,12 +72,7 @@ typename std::enable_if_t<std::is_array<T>::value, CudaUniquePtr<T>> make_unique
   CUDA_BLACKBOARD_CHECK_CUDA_ERROR(::cudaMemsetAsync(p, 0, sizeof(U) * n, mem_pool_ctx.stream()));
 
   // Wait until requested memory available
-  cudaEvent_t local_wait_event;
-  CUDA_BLACKBOARD_CHECK_CUDA_ERROR(
-    cudaEventCreateWithFlags(&local_wait_event, cudaEventDisableTiming));
-  CUDA_BLACKBOARD_CHECK_CUDA_ERROR(cudaEventRecord(local_wait_event, mem_pool_ctx.stream()));
-  CUDA_BLACKBOARD_CHECK_CUDA_ERROR(cudaEventSynchronize(local_wait_event));
-  CUDA_BLACKBOARD_CHECK_CUDA_ERROR(cudaEventDestroy(local_wait_event));
+  mem_pool_ctx.blockCpuUntilStreamCompletion();
 
   // Free on the dedicated free_stream() — see the invariant on CudaMemPoolContext::free_stream().
   return CudaUniquePtr<T>{p, CudaDeleter{mem_pool_ctx.free_stream()}};
@@ -97,12 +92,7 @@ CudaUniquePtr<T> make_unique()
   CUDA_BLACKBOARD_CHECK_CUDA_ERROR(::cudaMemsetAsync(p, 0, sizeof(T), mem_pool_ctx.stream()));
 
   // Wait until requested memory available
-  cudaEvent_t local_wait_event;
-  CUDA_BLACKBOARD_CHECK_CUDA_ERROR(
-    cudaEventCreateWithFlags(&local_wait_event, cudaEventDisableTiming));
-  CUDA_BLACKBOARD_CHECK_CUDA_ERROR(cudaEventRecord(local_wait_event, mem_pool_ctx.stream()));
-  CUDA_BLACKBOARD_CHECK_CUDA_ERROR(cudaEventSynchronize(local_wait_event));
-  CUDA_BLACKBOARD_CHECK_CUDA_ERROR(cudaEventDestroy(local_wait_event));
+  mem_pool_ctx.blockCpuUntilStreamCompletion();
 
   // Free on the dedicated free_stream() — see the invariant on CudaMemPoolContext::free_stream().
   return CudaUniquePtr<T>{p, CudaDeleter{mem_pool_ctx.free_stream()}};

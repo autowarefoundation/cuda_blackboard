@@ -29,6 +29,10 @@ public:
   /// Returns the CUDA memory pool used for pooled device allocations.
   cudaMemPool_t pool() { return pool_; }
 
+  /// Block the calling CPU thread until all work queued on stream() (the allocation stream)
+  /// up to this point has completed. Note: this does NOT wait on free_stream().
+  void blockCpuUntilStreamCompletion();
+
 private:
   /// Creates the CUDA stream and memory pool owned by this context.
   CudaMemPoolContext();
