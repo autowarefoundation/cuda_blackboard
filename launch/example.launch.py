@@ -31,6 +31,11 @@ def generate_launch_description():
                 plugin="cuda_blackboard::CudaBlackboardSubscriberNode",
                 name="cuda_blackboard_subscriber_example",
             ),
+            ComposableNode(
+                package="cuda_blackboard",
+                plugin="cuda_blackboard::CudaBlackboardSubscriberNodeWithStream",
+                name="cuda_blackboard_subscriber_with_stream_example",
+            ),
         ],
         output="both",
     )

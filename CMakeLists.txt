@@ -73,6 +73,36 @@ rclcpp_components_register_node(cuda_blackboard_subscriber_example
   EXECUTABLE cuda_blackboard_subscriber_node
 )
 
+# This example contains a .cu source, so it is built with cuda_add_library (legacy FindCUDA).
+# cuda_add_library does not get ament_auto's automatic dependency wiring, so ROS dependencies
+# must be listed explicitly via ament_target_dependencies.
+cuda_add_library(cuda_blackboard_subscriber_with_stream_example SHARED
+  src/cuda_blackboard_subscriber_node_with_stream.cu
+)
+
+ament_target_dependencies(cuda_blackboard_subscriber_with_stream_example
+  rclcpp
+  rclcpp_components
+  sensor_msgs
+)
+
+target_link_libraries(cuda_blackboard_subscriber_with_stream_example
+  cuda_blackboard
+  ${CUDA_LIBRARIES}
+)
+
+rclcpp_components_register_node(cuda_blackboard_subscriber_with_stream_example
+  PLUGIN "cuda_blackboard::CudaBlackboardSubscriberNodeWithStream"
+  EXECUTABLE cuda_blackboard_subscriber_node_with_stream
+)
+
+# cuda_add_library targets are not tracked by ament_auto, so install this one explicitly.
+install(TARGETS cuda_blackboard_subscriber_with_stream_example
+  ARCHIVE DESTINATION lib
+  LIBRARY DESTINATION lib
+  RUNTIME DESTINATION bin
+)
+
 install(DIRECTORY launch
   DESTINATION share/${PROJECT_NAME}
 )
