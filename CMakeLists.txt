@@ -23,6 +23,7 @@ endif ()
 
 if(BUILD_TESTING)
     find_package(ament_lint_auto REQUIRED)
+    find_package(ament_cmake_gtest REQUIRED)
     ament_lint_auto_find_test_dependencies()
 endif()
 
@@ -45,6 +46,28 @@ ament_auto_add_library(cuda_blackboard SHARED
 target_link_libraries(cuda_blackboard
     ${CUDA_LIBRARIES}
 )
+
+if(BUILD_TESTING)
+    ament_auto_find_test_dependencies()
+
+    ament_add_gtest(test_cuda_blackboard test/test_cuda_blackboard.cpp)
+    target_link_libraries(test_cuda_blackboard cuda_blackboard)
+
+    ament_add_gtest(test_cuda_image test/test_cuda_image.cpp)
+    target_link_libraries(test_cuda_image cuda_blackboard ${CUDA_LIBRARIES})
+
+    ament_add_gtest(test_cuda_pointcloud2 test/test_cuda_pointcloud2.cpp)
+    target_link_libraries(test_cuda_pointcloud2 cuda_blackboard ${CUDA_LIBRARIES})
+
+    ament_add_gtest(test_cuda_unique_ptr test/test_cuda_unique_ptr.cpp)
+    target_link_libraries(test_cuda_unique_ptr cuda_blackboard ${CUDA_LIBRARIES})
+
+    ament_add_gtest(test_cuda_error test/test_cuda_error.cpp)
+    target_link_libraries(test_cuda_error cuda_blackboard ${CUDA_LIBRARIES})
+
+    ament_add_gtest(test_cuda_blackboard_pubsub test/test_cuda_blackboard_pubsub.cpp)
+    target_link_libraries(test_cuda_blackboard_pubsub cuda_blackboard ${CUDA_LIBRARIES})
+endif()
 
 ####
 
