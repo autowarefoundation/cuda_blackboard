@@ -13,6 +13,7 @@ namespace
 size_t get_mem_pool_release_threshold()
 {
   constexpr size_t default_threshold_mb = 1024;  // 1GiB
+  // cspell:ignore mibi
   auto mibi_byte_to_byte = [](const auto & mib) { return mib * 1024 * 1024; };
 
   const char * env_value = std::getenv("CUDA_BLACKBOARD_MEM_POOL_RELEASE_THRESHOLD_MB");
