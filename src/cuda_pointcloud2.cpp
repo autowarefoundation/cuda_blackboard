@@ -4,51 +4,14 @@
 
 #include "cuda_blackboard/cuda_error.hpp"
 #include "cuda_blackboard/cuda_mem_pool_context.hpp"
+#include "cuda_message_impl_detail.hpp"
 
 #include <rclcpp/rclcpp.hpp>
 
 #include <cuda_runtime_api.h>
 
-#include <vector>
-
 namespace cuda_blackboard
 {
-
-namespace
-{
-
-template <typename T>
-const void * getDataPointer(const CudaUniquePtr<T[]> & data)
-{
-  return data.get();
-}
-
-template <typename T, typename Allocator>
-const void * getDataPointer(const std::vector<T, Allocator> & data)
-{
-  return data.data();
-}
-
-template <typename T>
-void copyDataToDevice(
-  CudaUniquePtr<uint8_t[]> & data, cudaEvent_t & ready_event, const T & source,
-  const cudaMemcpyKind copy_kind)
-{
-  auto & ctx = CudaMemPoolContext::getInstance();
-
-  // NOTE: `cudaEventBlockingSync` flag is not set here so that cudaEventSynchronize()
-  // will busy-wait until the event has been completed
-  CUDA_BLACKBOARD_CHECK_CUDA_ERROR(cudaEventCreateWithFlags(&ready_event, cudaEventDisableTiming));
-
-  auto size = source.height * source.width * source.point_step * sizeof(uint8_t);
-  data = make_unique<uint8_t[]>(size);
-  CUDA_BLACKBOARD_CHECK_CUDA_ERROR(
-    cudaMemcpyAsync(data.get(), getDataPointer(source.data), size, copy_kind, ctx.stream()));
-
-  CUDA_BLACKBOARD_CHECK_CUDA_ERROR(cudaEventRecord(ready_event, ctx.stream()));
-}
-
-}  // namespace
 
 CudaPointCloud2::CudaPointCloud2()
 {
@@ -106,7 +69,10 @@ CudaPointCloud2::CudaPointCloud2(const CudaPointCloud2 & pointcloud)
     "CudaPointCloud2 copy constructor called. This should be avoided and is most likely a design "
     "error.");
 
-  copyDataToDevice(data, ready_event_, pointcloud, cudaMemcpyDeviceToDevice);
+  impl_detail::copyDataToDevice(
+    data, ready_event_, pointcloud.data.get(),
+    pointcloud.height * pointcloud.width * pointcloud.point_step * sizeof(uint8_t),
+    cudaMemcpyDeviceToDevice);
 }
 
 CudaPointCloud2::CudaPointCloud2(const sensor_msgs::msg::PointCloud2 & source)
@@ -120,7 +86,9 @@ CudaPointCloud2::CudaPointCloud2(const sensor_msgs::msg::PointCloud2 & source)
   is_dense = source.is_dense;
   is_bigendian = source.is_bigendian;
 
-  copyDataToDevice(data, ready_event_, source, cudaMemcpyHostToDevice);
+  impl_detail::copyDataToDevice(
+    data, ready_event_, source.data.data(),
+    source.height * source.width * source.point_step * sizeof(uint8_t), cudaMemcpyHostToDevice);
 }
 
 CudaPointCloud2::~CudaPointCloud2()
