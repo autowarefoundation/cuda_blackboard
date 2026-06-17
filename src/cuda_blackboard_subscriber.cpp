@@ -87,7 +87,7 @@ void CudaBlackboardSubscriber<T>::instanceIdCallback(const std_msgs::msg::UInt64
   auto data = blackboard.queryData(instance_id_msg.data);
   if (data) {
     CUDA_BLACKBOARD_CHECK_CUDA_ERROR(
-      cudaStreamWaitEvent(user_stream_, data->ready_event(), cudaEventWaitDefault));
+      cudaStreamWaitEvent(user_stream_, data->ready_event_, cudaEventWaitDefault));
 
     callback_(data);
 
@@ -119,7 +119,7 @@ void CudaBlackboardSubscriber<T>::compatibleCallback(
   }
   auto cuda_msg_ptr = std::make_shared<T>(*ros_msg_ptr);
   CUDA_BLACKBOARD_CHECK_CUDA_ERROR(
-    cudaStreamWaitEvent(user_stream_, cuda_msg_ptr->ready_event(), cudaEventWaitDefault));
+    cudaStreamWaitEvent(user_stream_, cuda_msg_ptr->ready_event_, cudaEventWaitDefault));
 
   RCLCPP_WARN_ONCE(
     node_.get_logger(),

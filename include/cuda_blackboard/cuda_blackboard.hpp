@@ -58,15 +58,4 @@ private:
   std::random_device rd_;
 };
 
-// Traits to detect if a class has "ready_event()" as a member
-template <class, class = void>
-struct has_ready_event : std::false_type
-{
-};
-
-template <class T>
-struct has_ready_event<T, std::void_t<decltype(std::declval<T>().ready_event())>> : std::true_type
-{
-};
-
 }  // namespace cuda_blackboard
