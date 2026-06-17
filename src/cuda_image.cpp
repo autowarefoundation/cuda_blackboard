@@ -60,6 +60,7 @@ CudaImage::CudaImage(const CudaImage & image) : sensor_msgs::msg::Image(image)
     rclcpp::get_logger("CudaImage"),
     "CudaImage copy constructor called. This should be avoided and is most likely a design error.");
 
+  CUDA_BLACKBOARD_CHECK_CUDA_ERROR(cudaEventCreateWithFlags(&ready_event_, cudaEventDisableTiming));
   copyDataToDevice(*this, image, cudaMemcpyDeviceToDevice);
 }
 
@@ -72,6 +73,7 @@ CudaImage::CudaImage(const sensor_msgs::msg::Image & source)
   step = source.step;
   is_bigendian = source.is_bigendian;
 
+  CUDA_BLACKBOARD_CHECK_CUDA_ERROR(cudaEventCreateWithFlags(&ready_event_, cudaEventDisableTiming));
   copyDataToDevice(*this, source, cudaMemcpyHostToDevice);
 }
 

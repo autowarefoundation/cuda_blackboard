@@ -84,6 +84,9 @@ CudaPointCloud2 & CudaPointCloud2::operator=(CudaPointCloud2 && other)
     is_dense = other.is_dense;
     is_bigendian = other.is_bigendian;
     data = std::move(other.data);
+    if (ready_event_) {
+      CUDA_BLACKBOARD_CHECK_CUDA_ERROR(cudaEventDestroy(ready_event_));
+    }
     ready_event_ = std::move(other.ready_event_);
 
     other.data = nullptr;
@@ -101,6 +104,7 @@ CudaPointCloud2::CudaPointCloud2(const CudaPointCloud2 & pointcloud)
     "CudaPointCloud2 copy constructor called. This should be avoided and is most likely a design "
     "error.");
 
+  CUDA_BLACKBOARD_CHECK_CUDA_ERROR(cudaEventCreateWithFlags(&ready_event_, cudaEventDisableTiming));
   copyDataToDevice(*this, pointcloud, cudaMemcpyDeviceToDevice);
 }
 
@@ -115,6 +119,7 @@ CudaPointCloud2::CudaPointCloud2(const sensor_msgs::msg::PointCloud2 & source)
   is_dense = source.is_dense;
   is_bigendian = source.is_bigendian;
 
+  CUDA_BLACKBOARD_CHECK_CUDA_ERROR(cudaEventCreateWithFlags(&ready_event_, cudaEventDisableTiming));
   copyDataToDevice(*this, source, cudaMemcpyHostToDevice);
 }
 
