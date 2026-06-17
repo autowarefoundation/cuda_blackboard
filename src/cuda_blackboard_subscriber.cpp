@@ -176,19 +176,6 @@ void CudaBlackboardSubscriber<T>::compatibleCallback(
 template <typename T>
 void CudaBlackboardSubscriber<T>::addConsumerDependencyToFreeStream() const
 {
-  // Records an event on the consumer stream (`user_stream_`, or the legacy default stream as a
-  // fallback) and makes `free_stream()` wait on it. Call this right after `callback_` returns,
-  // while the message is still alive, so the `cudaFreeAsync` issued by `CudaDeleter` (which runs on
-  // the same `free_stream()`) is ordered strictly after consumption. See
-  // CudaMemPoolContext::free_stream() for why the two streams must match.
-  //
-  // NOTE: the legacy-default-stream fallback does not work when all of the following hold:
-  // - the data is consumed in `callback_` on a stream created with the `cudaStreamNonBlocking`
-  //   flag, AND
-  // - no proper stream synchronization is performed in the callback, AND
-  // - that stream is not passed as the `user_stream` argument of the constructor.
-  // Such a non-blocking stream does not synchronize with the legacy default stream, so the event
-  // recorded here cannot capture the consumption and the memory may be freed too early.
   const cudaStream_t record_stream =
     needFallbackToLegacyDefaultStream(user_stream_) ? cudaStreamLegacy : user_stream_;
   auto & ctx = CudaMemPoolContext::getInstance();

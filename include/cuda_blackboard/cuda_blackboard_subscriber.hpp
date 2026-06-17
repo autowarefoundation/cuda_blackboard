@@ -41,8 +41,30 @@ private:
 
   void compatibleCallback(const std::shared_ptr<const typename T::ros_type> & ros_msg_ptr);
 
+  /**
+   * @brief Check whether the given CUDA stream requires fallback to the legacy default stream.
+   *
+   * @return True if the stream is nullptr or the legacy default stream.
+   */
   inline bool needFallbackToLegacyDefaultStream(const cudaStream_t & stream) const;
 
+  /**
+   * @brief Make the CUDA memory-pool free stream held by CudaMemPoolContext wait for the
+   * callback's consumer stream.
+   *
+   * @details Records an event on the consumer stream, or on the legacy default stream as a
+   * fallback, and makes CudaMemPoolContext::free_stream() wait on it. Call this right after the
+   * callback returns, while the message is still alive, so the cudaFreeAsync issued by CudaDeleter
+   * on the same free stream is ordered strictly after consumption. See
+   * CudaMemPoolContext::free_stream() for why the two streams must match.
+   *
+   * @note The legacy-default-stream fallback does not work when all of the following hold: the data
+   * is consumed in the callback on a stream created with the cudaStreamNonBlocking flag, no proper
+   * stream synchronization is performed in the callback, and that stream is not passed as the
+   * user_stream argument of the constructor. Such a non-blocking stream does not synchronize with
+   * the legacy default stream, so the event recorded here cannot capture the consumption and the
+   * memory may be freed too early.
+   */
   void addConsumerDependencyToFreeStream() const;
 
   std::function<void(std::shared_ptr<const T> cuda_msg)> callback_{};
