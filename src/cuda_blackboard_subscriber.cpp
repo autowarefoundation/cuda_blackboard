@@ -15,50 +15,10 @@ namespace cuda_blackboard
 
 template <typename T>
 CudaBlackboardSubscriber<T>::CudaBlackboardSubscriber(
-  rclcpp::Node & node, const std::string & topic_name, [[maybe_unused]] bool add_compatible_sub,
+  rclcpp::Node & node, const std::string & topic_name, bool,
   std::function<void(std::shared_ptr<const T>)> callback, cudaStream_t user_stream)
-: node_(node), user_stream_(user_stream)
+: CudaBlackboardSubscriber(node, topic_name, callback, user_stream)
 {
-  using std::placeholders::_1;
-
-  if (needFallbackToLegacyDefaultStream(user_stream_)) {
-    RCLCPP_WARN_STREAM(
-      node_.get_logger(),
-      "`user_stream` was not set or the legacy default stream was specified for the "
-      "CudaBlackboardSubscriber of "
-        << topic_name
-        << ". This causes process-wide synchronization after the callback executes, which may "
-           "degrade performance. Moreover, if the subscribed data is consumed on a CUDA stream "
-           "created with the `cudaStreamNonBlocking` flag, this may cause a use-after-free of the "
-           "pointer. To avoid this, consider the following:"
-        << std::endl
-        << "  - pass the stream to the CudaBlackboardSubscriber's constructor, and/or " << std::endl
-        << "  - perform proper synchronization on the stream in the callback");
-  }
-
-  negotiated::NegotiatedSubscriptionOptions negotiation_options;
-  negotiation_options.disconnect_on_negotiation_failure = false;
-
-  callback_ = callback;
-  negotiated_sub_ = std::make_shared<negotiated::NegotiatedSubscription>(
-    node, topic_name + "/cuda", negotiation_options);
-
-  rclcpp::SubscriptionOptions sub_options;
-  sub_options.use_intra_process_comm = rclcpp::IntraProcessSetting::Enable;
-
-  negotiated_sub_->add_supported_callback<NegotiationStruct<T>>(
-    1.0, rclcpp::QoS(1), std::bind(&CudaBlackboardSubscriber<T>::instanceIdCallback, this, _1),
-    sub_options);
-
-  std::string ros_type_name = NegotiationStruct<typename T::ros_type>::supported_type_name;
-
-  compatible_sub_ = node.create_subscription<typename T::ros_type>(
-    topic_name, rclcpp::SensorDataQoS(),
-    std::bind(&CudaBlackboardSubscriber<T>::compatibleCallback, this, _1), sub_options);
-
-  negotiated_sub_->add_compatible_subscription(compatible_sub_, ros_type_name, 0.1);
-
-  negotiated_sub_->start();
 }
 
 template <typename T>

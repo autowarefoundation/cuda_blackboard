@@ -24,8 +24,8 @@ public:
 
   [[deprecated(
     "Use the constructor that takes cudaStream_t to avoid legacy-default-stream synchronization, "
-    "which can degrade performance.")]] CudaBlackboardSubscriber(rclcpp::Node & node, const std::string & topic_name, bool add_compatible_sub, std::function<void(std::shared_ptr<const T>)> callback)
-  : CudaBlackboardSubscriber(node, topic_name, add_compatible_sub, callback, cudaStreamLegacy) {};
+    "which can degrade performance.")]] CudaBlackboardSubscriber(rclcpp::Node & node, const std::string & topic_name, bool, std::function<void(std::shared_ptr<const T>)> callback)
+  : CudaBlackboardSubscriber(node, topic_name, callback, cudaStreamLegacy) {};
 
   CudaBlackboardSubscriber(
     rclcpp::Node & node, const std::string & topic_name,
