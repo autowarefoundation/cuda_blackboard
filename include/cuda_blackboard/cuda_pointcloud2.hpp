@@ -11,6 +11,9 @@
 namespace cuda_blackboard
 {
 
+template <typename T>
+class CudaBlackboardSubscriber;
+
 class CudaPointCloud2 : public sensor_msgs::msg::PointCloud2
 {
 public:
@@ -37,12 +40,14 @@ public:
 
   ~CudaPointCloud2();
 
-  cudaEvent_t & ready_event() { return ready_event_; }
-  const cudaEvent_t & ready_event() const { return ready_event_; }
-
   CudaUniquePtr<std::uint8_t[]> data;
 
 private:
+  friend class CudaBlackboardSubscriber<CudaPointCloud2>;
+
+  cudaEvent_t & ready_event() { return ready_event_; }
+  const cudaEvent_t & ready_event() const { return ready_event_; }
+
   cudaEvent_t ready_event_{nullptr};
 };
 

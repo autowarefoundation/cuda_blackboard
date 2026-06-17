@@ -12,6 +12,9 @@
 namespace cuda_blackboard
 {
 
+template <typename T>
+class CudaBlackboardSubscriber;
+
 class CudaImage : public sensor_msgs::msg::Image
 {
 public:
@@ -37,13 +40,15 @@ public:
 
   ~CudaImage();
 
-  cudaEvent_t & ready_event() { return ready_event_; }
-  const cudaEvent_t & ready_event() const { return ready_event_; }
-
   CudaUniquePtr<std::uint8_t[]> data;
 
 private:
-  cudaEvent_t ready_event_;
+  friend class CudaBlackboardSubscriber<CudaImage>;
+
+  cudaEvent_t & ready_event() { return ready_event_; }
+  const cudaEvent_t & ready_event() const { return ready_event_; }
+
+  cudaEvent_t ready_event_{nullptr};
 };
 
 }  // namespace cuda_blackboard
