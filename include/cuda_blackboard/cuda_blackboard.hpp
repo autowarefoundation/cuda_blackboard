@@ -58,7 +58,7 @@ private:
   std::random_device rd_;
 };
 
-// Traits to detect if a class has "ready_event()" as a menber
+// Traits to detect if a class has "ready_event()" as a member
 template <class, class = void>
 struct has_ready_event : std::false_type
 {

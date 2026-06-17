@@ -126,7 +126,7 @@ void CudaBlackboardSubscriber<T>::instanceIdCallback(const std_msgs::msg::UInt64
   auto & blackboard = CudaBlackboard<T>::getInstance();
   auto data = blackboard.queryData(instance_id_msg.data);
   if (data) {
-    static_assert(has_ready_event<T>::value, "T must expose ready_event())");
+    static_assert(has_ready_event<T>::value, "T must expose ready_event()");
     CUDA_BLACKBOARD_CHECK_CUDA_ERROR(
       cudaStreamWaitEvent(user_stream_, data->ready_event(), cudaEventWaitDefault));
 
@@ -159,7 +159,7 @@ void CudaBlackboardSubscriber<T>::compatibleCallback(
     return;
   }
   auto cuda_msg_ptr = std::make_shared<T>(*ros_msg_ptr);
-  static_assert(has_ready_event<T>::value, "T must expose ready_event())");
+  static_assert(has_ready_event<T>::value, "T must expose ready_event()");
   CUDA_BLACKBOARD_CHECK_CUDA_ERROR(
     cudaStreamWaitEvent(user_stream_, cuda_msg_ptr->ready_event(), cudaEventWaitDefault));
 
