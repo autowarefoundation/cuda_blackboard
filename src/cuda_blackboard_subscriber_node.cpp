@@ -2,6 +2,7 @@
 
 #include "cuda_blackboard/cuda_adaptation.hpp"
 #include "cuda_blackboard/cuda_blackboard_subscriber.hpp"
+#include "cuda_blackboard/cuda_error.hpp"
 #include "cuda_blackboard/cuda_image.hpp"
 
 #include <rclcpp/rclcpp.hpp>
@@ -21,6 +22,8 @@ public:
   explicit CudaBlackboardSubscriberNode(const rclcpp::NodeOptions & options)
   : rclcpp::Node("cuda_blackboard_subscriber_node", options)
   {
+    CUDA_BLACKBOARD_CHECK_CUDA_ERROR(cudaStreamCreate(&stream_));
+
     auto callback = [this](std::shared_ptr<const CudaImage> cuda_msg) {
       RCLCPP_INFO(
         this->get_logger(), "Received message with resolution: %u x %u", cuda_msg->height,
@@ -40,8 +43,8 @@ public:
       pub_->publish(std::move(ros_image));
     };
 
-    sub_ =
-      std::make_shared<CudaBlackboardSubscriber<CudaImage>>(*this, "image_raw", false, callback);
+    sub_ = std::make_shared<CudaBlackboardSubscriber<CudaImage>>(
+      *this, "image_raw", false, callback, stream_);
 
     pub_ = this->create_publisher<sensor_msgs::msg::Image>("output_image", 10);
   }
@@ -49,6 +52,7 @@ public:
 private:
   rclcpp::Publisher<sensor_msgs::msg::Image>::SharedPtr pub_;
   std::shared_ptr<CudaBlackboardSubscriber<CudaImage>> sub_;
+  cudaStream_t stream_{nullptr};
 };
 
 }  // namespace cuda_blackboard
