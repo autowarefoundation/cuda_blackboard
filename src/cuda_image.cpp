@@ -51,8 +51,7 @@ CudaImage::CudaImage()
 {
   // NOTE: `cudaEventBlockingSync` flag is not set here so that cudaEventSynchronize()
   // will busy-wait until the event has been completed
-  CUDA_BLACKBOARD_CHECK_CUDA_ERROR(
-    cudaEventCreateWithFlags(&ready_event(), cudaEventDisableTiming));
+  CUDA_BLACKBOARD_CHECK_CUDA_ERROR(cudaEventCreateWithFlags(&ready_event_, cudaEventDisableTiming));
 }
 
 CudaImage::CudaImage(const CudaImage & image) : sensor_msgs::msg::Image(image)
@@ -80,8 +79,8 @@ CudaImage::~CudaImage()
 {
   if (ready_event_) {
     auto & ctx = CudaMemPoolContext::getInstance();
-    cudaStreamWaitEvent(ctx.free_stream(), ready_event(), cudaEventWaitDefault);
-    cudaEventDestroy(ready_event());
+    cudaStreamWaitEvent(ctx.free_stream(), ready_event_, cudaEventWaitDefault);
+    cudaEventDestroy(ready_event_);
   }
 }
 
