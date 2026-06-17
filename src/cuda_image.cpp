@@ -12,6 +12,41 @@
 
 namespace cuda_blackboard
 {
+namespace
+{
+
+template <typename T>
+const void * getDataPointer(const CudaUniquePtr<T[]> & data)
+{
+  return data.get();
+}
+
+template <typename T, typename Allocator>
+const void * getDataPointer(const std::vector<T, Allocator> & data)
+{
+  return data.data();
+}
+
+template <typename T>
+void copyDataToDevice(CudaImage & image, const T & source, const cudaMemcpyKind copy_kind)
+{
+  auto & ctx = CudaMemPoolContext::getInstance();
+
+  // NOTE: `cudaEventBlockingSync` flag is not set here so that cudaEventSynchronize()
+  // will busy-wait until the event has been completed
+  CUDA_BLACKBOARD_CHECK_CUDA_ERROR(
+    cudaEventCreateWithFlags(&image.ready_event(), cudaEventDisableTiming));
+
+  auto size = source.height * source.step * sizeof(uint8_t);
+  image.data = make_unique<uint8_t[]>(size);
+  CUDA_BLACKBOARD_CHECK_CUDA_ERROR(
+    cudaMemcpyAsync(image.data.get(), getDataPointer(source.data), size, copy_kind, ctx.stream()));
+
+  CUDA_BLACKBOARD_CHECK_CUDA_ERROR(cudaEventRecord(image.ready_event(), ctx.stream()));
+}
+
+}  // namespace
+
 CudaImage::CudaImage()
 {
   // NOTE: `cudaEventBlockingSync` flag is not set here so that cudaEventSynchronize()
@@ -26,19 +61,7 @@ CudaImage::CudaImage(const CudaImage & image) : sensor_msgs::msg::Image(image)
     rclcpp::get_logger("CudaImage"),
     "CudaImage copy constructor called. This should be avoided and is most likely a design error.");
 
-  auto & ctx = CudaMemPoolContext::getInstance();
-
-  // NOTE: `cudaEventBlockingSync` flag is not set here so that cudaEventSynchronize()
-  // will busy-wait until the event has been completed
-  CUDA_BLACKBOARD_CHECK_CUDA_ERROR(
-    cudaEventCreateWithFlags(&ready_event(), cudaEventDisableTiming));
-
-  data = make_unique<uint8_t[]>(image.height * image.step * sizeof(uint8_t));
-  CUDA_BLACKBOARD_CHECK_CUDA_ERROR(cudaMemcpyAsync(
-    data.get(), image.data.get(), image.height * image.step * sizeof(uint8_t),
-    cudaMemcpyDeviceToDevice, ctx.stream()));
-
-  CUDA_BLACKBOARD_CHECK_CUDA_ERROR(cudaEventRecord(ready_event(), ctx.stream()));
+  copyDataToDevice(*this, image, cudaMemcpyDeviceToDevice);
 }
 
 CudaImage::CudaImage(const sensor_msgs::msg::Image & source)
@@ -50,19 +73,7 @@ CudaImage::CudaImage(const sensor_msgs::msg::Image & source)
   step = source.step;
   is_bigendian = source.is_bigendian;
 
-  auto & ctx = CudaMemPoolContext::getInstance();
-
-  // NOTE: `cudaEventBlockingSync` flag is not set here so that cudaEventSynchronize()
-  // will busy-wait until the event has been completed
-  CUDA_BLACKBOARD_CHECK_CUDA_ERROR(
-    cudaEventCreateWithFlags(&ready_event(), cudaEventDisableTiming));
-
-  data = make_unique<uint8_t[]>(source.height * source.step * sizeof(uint8_t));
-  CUDA_BLACKBOARD_CHECK_CUDA_ERROR(cudaMemcpyAsync(
-    data.get(), source.data.data(), source.height * source.step * sizeof(uint8_t),
-    cudaMemcpyHostToDevice, ctx.stream()));
-
-  CUDA_BLACKBOARD_CHECK_CUDA_ERROR(cudaEventRecord(ready_event(), ctx.stream()));
+  copyDataToDevice(*this, source, cudaMemcpyHostToDevice);
 }
 
 CudaImage::~CudaImage()
