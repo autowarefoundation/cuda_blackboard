@@ -56,46 +56,45 @@ struct CudaDeleter
 template <typename T>
 using CudaUniquePtr = std::unique_ptr<T, CudaDeleter>;
 
+namespace detail
+{
+
+template <typename ElementT, typename UniquePtrT>
+inline UniquePtrT make_unique_impl(const std::size_t n)
+{
+  ElementT * p;
+  auto & mem_pool_ctx = CudaMemPoolContext::getInstance();
+
+  CUDA_BLACKBOARD_CHECK_CUDA_ERROR(::cudaMallocFromPoolAsync(
+    reinterpret_cast<void **>(&p), sizeof(ElementT) * n, mem_pool_ctx.pool(),
+    mem_pool_ctx.stream()));
+
+  // To prevent unexpected behavior caused by dirty region allocated by the pool,
+  // zero clear the taken region
+  CUDA_BLACKBOARD_CHECK_CUDA_ERROR(
+    ::cudaMemsetAsync(p, 0, sizeof(ElementT) * n, mem_pool_ctx.stream()));
+
+  // Wait until requested memory available
+  mem_pool_ctx.blockCpuUntilStreamCompletion();
+
+  // Free on the dedicated free_stream() — see the invariant on CudaMemPoolContext::free_stream().
+  return UniquePtrT{p, CudaDeleter{mem_pool_ctx.free_stream()}};
+}
+
+}  // namespace detail
+
 template <typename T>
 typename std::enable_if_t<std::is_array<T>::value, CudaUniquePtr<T>> make_unique(
   const std::size_t n)
 {
   using U = typename std::remove_extent_t<T>;
-  auto & mem_pool_ctx = CudaMemPoolContext::getInstance();
-
-  U * p;
-  CUDA_BLACKBOARD_CHECK_CUDA_ERROR(::cudaMallocFromPoolAsync(
-    reinterpret_cast<void **>(&p), sizeof(U) * n, mem_pool_ctx.pool(), mem_pool_ctx.stream()));
-
-  // To prevent unexpected behavior caused by dirty region allocated by the pool,
-  // zero clear the taken region
-  CUDA_BLACKBOARD_CHECK_CUDA_ERROR(::cudaMemsetAsync(p, 0, sizeof(U) * n, mem_pool_ctx.stream()));
-
-  // Wait until requested memory available
-  mem_pool_ctx.blockCpuUntilStreamCompletion();
-
-  // Free on the dedicated free_stream() — see the invariant on CudaMemPoolContext::free_stream().
-  return CudaUniquePtr<T>{p, CudaDeleter{mem_pool_ctx.free_stream()}};
+  return detail::make_unique_impl<U, CudaUniquePtr<T>>(n);
 }
 
 template <typename T>
 CudaUniquePtr<T> make_unique()
 {
-  T * p;
-  auto & mem_pool_ctx = CudaMemPoolContext::getInstance();
-
-  CUDA_BLACKBOARD_CHECK_CUDA_ERROR(::cudaMallocFromPoolAsync(
-    reinterpret_cast<void **>(&p), sizeof(T), mem_pool_ctx.pool(), mem_pool_ctx.stream()));
-
-  // To prevent unexpected behavior caused by dirty region allocated by the pool,
-  // zero clear the taken region
-  CUDA_BLACKBOARD_CHECK_CUDA_ERROR(::cudaMemsetAsync(p, 0, sizeof(T), mem_pool_ctx.stream()));
-
-  // Wait until requested memory available
-  mem_pool_ctx.blockCpuUntilStreamCompletion();
-
-  // Free on the dedicated free_stream() — see the invariant on CudaMemPoolContext::free_stream().
-  return CudaUniquePtr<T>{p, CudaDeleter{mem_pool_ctx.free_stream()}};
+  return detail::make_unique_impl<T, CudaUniquePtr<T>>(1);
 }
 
 struct HostDeleter
