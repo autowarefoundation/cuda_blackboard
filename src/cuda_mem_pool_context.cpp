@@ -62,14 +62,20 @@ CudaMemPoolContext & CudaMemPoolContext::getInstance()
 
 CudaMemPoolContext::~CudaMemPoolContext()
 {
-  if (pool_) {
-    cudaMemPoolDestroy(pool_);
+  if (stream_) {
+    cudaStreamSynchronize(stream_);
+  }
+  if (free_stream_) {
+    cudaStreamSynchronize(free_stream_);
   }
   if (stream_) {
     cudaStreamDestroy(stream_);
   }
   if (free_stream_) {
     cudaStreamDestroy(free_stream_);
+  }
+  if (pool_) {
+    cudaMemPoolDestroy(pool_);
   }
 }
 
