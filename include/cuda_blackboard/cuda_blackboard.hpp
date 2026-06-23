@@ -8,7 +8,9 @@
 #include <mutex>
 #include <random>
 #include <string>
+#include <type_traits>
 #include <unordered_map>
+#include <utility>
 
 namespace cuda_blackboard
 {

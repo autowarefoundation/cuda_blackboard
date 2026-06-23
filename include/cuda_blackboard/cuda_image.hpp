@@ -12,6 +12,9 @@
 namespace cuda_blackboard
 {
 
+template <typename T>
+class CudaBlackboardSubscriber;
+
 class CudaImage : public sensor_msgs::msg::Image
 {
 public:
@@ -28,7 +31,7 @@ public:
   using ConstUniquePtrWithDeleter = std::unique_ptr<CudaImage const, Deleter>;
   using ConstUniquePtr = ConstUniquePtrWithDeleter<>;
 
-  CudaImage() = default;
+  CudaImage();
   CudaImage(const CudaImage & image);  // This is needed for ROS compliance
   CudaImage & operator=(const CudaImage &) = delete;
   CudaImage(CudaImage && image) = default;
@@ -38,6 +41,11 @@ public:
   ~CudaImage();
 
   CudaUniquePtr<std::uint8_t[]> data;
+
+private:
+  friend class CudaBlackboardSubscriber<CudaImage>;
+
+  cudaEvent_t ready_event_{nullptr};
 };
 
 }  // namespace cuda_blackboard

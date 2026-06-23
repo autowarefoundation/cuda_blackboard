@@ -1,13 +1,18 @@
 
 #pragma once
 
+#include "cuda_blackboard/cuda_error.hpp"
 #include "cuda_blackboard/cuda_image.hpp"
+#include "cuda_blackboard/cuda_mem_pool_context.hpp"
 #include "cuda_blackboard/cuda_pointcloud2.hpp"
+#include "cuda_blackboard/cuda_unique_ptr.hpp"
 
 #include <rclcpp/rclcpp.hpp>
 #include <rclcpp/type_adapter.hpp>
 
 #include <cuda_runtime_api.h>
+
+#include <cstdint>
 
 template <>
 struct rclcpp::TypeAdapter<cuda_blackboard::CudaImage, sensor_msgs::msg::Image>
@@ -25,11 +30,16 @@ struct rclcpp::TypeAdapter<cuda_blackboard::CudaImage, sensor_msgs::msg::Image>
     destination.step = source.step;
     destination.is_bigendian = source.is_bigendian;
 
+    auto & ctx = cuda_blackboard::CudaMemPoolContext::getInstance();
+
     RCLCPP_DEBUG(rclcpp::get_logger("CudaImage"), "Converting to ROS message");
     destination.data.resize(source.height * source.step * sizeof(uint8_t));
-    cudaMemcpy(
+    CUDA_BLACKBOARD_CHECK_CUDA_ERROR(cudaMemcpyAsync(
       destination.data.data(), source.data.get(), source.height * source.step * sizeof(uint8_t),
-      cudaMemcpyDeviceToHost);
+      cudaMemcpyDeviceToHost, ctx.stream()));
+
+    // Block CPU thread until operation finishes
+    ctx.blockCpuUntilStreamCompletion();
   }
 
   static void convert_to_custom(const ros_message_type & source, custom_type & destination)
@@ -41,11 +51,15 @@ struct rclcpp::TypeAdapter<cuda_blackboard::CudaImage, sensor_msgs::msg::Image>
     destination.step = source.step;
     destination.is_bigendian = source.is_bigendian;
 
-    cudaMalloc(
-      reinterpret_cast<void **>(&destination.data), source.height * source.step * sizeof(uint8_t));
-    cudaMemcpy(
+    auto & ctx = cuda_blackboard::CudaMemPoolContext::getInstance();
+
+    destination.data = cuda_blackboard::make_unique<uint8_t[]>(source.height * source.step);
+    CUDA_BLACKBOARD_CHECK_CUDA_ERROR(cudaMemcpyAsync(
       destination.data.get(), source.data.data(), source.height * source.step * sizeof(uint8_t),
-      cudaMemcpyHostToDevice);
+      cudaMemcpyHostToDevice, ctx.stream()));
+
+    // Block CPU thread until operation finishes
+    ctx.blockCpuUntilStreamCompletion();
   }
 };
 
@@ -67,10 +81,16 @@ struct rclcpp::TypeAdapter<cuda_blackboard::CudaPointCloud2, sensor_msgs::msg::P
     destination.row_step = source.row_step;
     destination.is_dense = source.is_dense;
 
+    auto & ctx = cuda_blackboard::CudaMemPoolContext::getInstance();
+
     destination.data.resize(source.height * source.width * source.point_step);
-    cudaMemcpy(
+    CUDA_BLACKBOARD_CHECK_CUDA_ERROR(cudaMemcpyAsync(
       destination.data.data(), source.data.get(),
-      source.height * source.width * source.point_step * sizeof(uint8_t), cudaMemcpyDeviceToHost);
+      source.height * source.width * source.point_step * sizeof(uint8_t), cudaMemcpyDeviceToHost,
+      ctx.stream()));
+
+    // Block CPU thread until operation finishes
+    ctx.blockCpuUntilStreamCompletion();
   }
 
   static void convert_to_custom(const ros_message_type & source, custom_type & destination)
@@ -84,13 +104,18 @@ struct rclcpp::TypeAdapter<cuda_blackboard::CudaPointCloud2, sensor_msgs::msg::P
     destination.row_step = source.row_step;
     destination.is_dense = source.is_dense;
 
+    auto & ctx = cuda_blackboard::CudaMemPoolContext::getInstance();
+
     RCLCPP_DEBUG(rclcpp::get_logger("CudaPointCloud2"), "Converting from ROS message");
-    cudaMalloc(
-      reinterpret_cast<void **>(&destination.data),
-      source.height * source.width * source.point_step * sizeof(uint8_t));
-    cudaMemcpy(
+    destination.data =
+      cuda_blackboard::make_unique<uint8_t[]>(source.height * source.width * source.point_step);
+    CUDA_BLACKBOARD_CHECK_CUDA_ERROR(cudaMemcpyAsync(
       destination.data.get(), source.data.data(),
-      source.height * source.width * source.point_step * sizeof(uint8_t), cudaMemcpyHostToDevice);
+      source.height * source.width * source.point_step * sizeof(uint8_t), cudaMemcpyHostToDevice,
+      ctx.stream()));
+
+    // Block CPU thread until operation finishes
+    ctx.blockCpuUntilStreamCompletion();
   }
 };
 
