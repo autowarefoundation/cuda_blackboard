@@ -48,7 +48,7 @@ CudaImage::~CudaImage()
 {
   if (ready_event_) {
     auto & ctx = CudaMemPoolContext::getInstance();
-    cudaStreamWaitEvent(ctx.free_stream(), ready_event_, cudaEventWaitDefault);
+    cudaStreamWaitEvent(ctx.stream(), ready_event_, cudaEventWaitDefault);
     cudaEventDestroy(ready_event_);
   }
 }

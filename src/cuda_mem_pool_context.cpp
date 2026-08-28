@@ -34,9 +34,9 @@ namespace cuda_blackboard
 
 CudaMemPoolContext::CudaMemPoolContext()
 {
-  // The dedicated stream to handle this memory pool frees from the default stream operations
+  // A single non-blocking stream carries every pool operation, so allocations and frees are
+  // ordered with respect to each other without any explicit synchronisation.
   CUDA_BLACKBOARD_CHECK_CUDA_ERROR(cudaStreamCreateWithFlags(&stream_, cudaStreamNonBlocking));
-  CUDA_BLACKBOARD_CHECK_CUDA_ERROR(cudaStreamCreateWithFlags(&free_stream_, cudaStreamNonBlocking));
 
   int device_id = 0;
   CUDA_BLACKBOARD_CHECK_CUDA_ERROR(cudaStreamGetDevice(stream_, &device_id));
@@ -64,15 +64,7 @@ CudaMemPoolContext::~CudaMemPoolContext()
 {
   if (stream_) {
     cudaStreamSynchronize(stream_);
-  }
-  if (free_stream_) {
-    cudaStreamSynchronize(free_stream_);
-  }
-  if (stream_) {
     cudaStreamDestroy(stream_);
-  }
-  if (free_stream_) {
-    cudaStreamDestroy(free_stream_);
   }
   if (pool_) {
     cudaMemPoolDestroy(pool_);

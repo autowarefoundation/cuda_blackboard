@@ -77,8 +77,8 @@ inline UniquePtrT make_unique_impl(const std::size_t n)
   // Wait until requested memory available
   mem_pool_ctx.blockCpuUntilStreamCompletion();
 
-  // Free on the dedicated free_stream() — see the invariant on CudaMemPoolContext::free_stream().
-  return UniquePtrT{p, CudaDeleter{mem_pool_ctx.free_stream()}};
+  // Free on the same stream we allocated on — see the invariant on CudaMemPoolContext::stream().
+  return UniquePtrT{p, CudaDeleter{mem_pool_ctx.stream()}};
 }
 
 }  // namespace detail

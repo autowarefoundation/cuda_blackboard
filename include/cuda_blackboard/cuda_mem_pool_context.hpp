@@ -14,23 +14,20 @@ public:
   /// Returns the process-wide CUDA memory pool context.
   static CudaMemPoolContext & getInstance();
 
-  /// Returns the stream used for asynchronous memory pool operations.
-  cudaStream_t stream() { return stream_; }
-
-  /// Returns the stream dedicated to asynchronous frees (cudaFreeAsync).
+  /// Returns the stream used for every memory pool operation, allocation and free alike.
   ///
-  /// INVARIANT: every free-side operation must use this stream — CudaDeleter frees on it (see
-  /// make_unique), and CudaBlackboardSubscriber injects consumer-completion waits on it before the
-  /// free. Routing both through one stream is what keeps cudaFreeAsync ordered after consumption.
-  /// It is kept separate from stream() (the allocation stream) so those waits never stall the
-  /// host-side allocation sync performed in make_unique().
-  cudaStream_t free_stream() { return free_stream_; }
+  /// INVARIANT: allocations (cudaMallocFromPoolAsync), frees (cudaFreeAsync) and the
+  /// consumer-completion waits injected by CudaBlackboardSubscriber all go through this one
+  /// stream. Stream-ordered allocation then guarantees that a block freed here is immediately
+  /// reusable by the next allocation, with no event plumbing and no chance of the allocator
+  /// conservatively reserving new memory because it cannot prove the free happened first.
+  cudaStream_t stream() { return stream_; }
 
   /// Returns the CUDA memory pool used for pooled device allocations.
   cudaMemPool_t pool() { return pool_; }
 
-  /// Block the calling CPU thread until all work queued on stream() (the allocation stream)
-  /// up to this point has completed. Note: this does NOT wait on free_stream().
+  /// Block the calling CPU thread until all work queued on stream() up to this point has
+  /// completed. Because frees and consumer waits share this stream, this also drains them.
   void blockCpuUntilStreamCompletion();
 
 private:
@@ -39,7 +36,6 @@ private:
   ~CudaMemPoolContext();
 
   cudaStream_t stream_{nullptr};
-  cudaStream_t free_stream_{nullptr};
   cudaMemPool_t pool_{};
 
   /// This singleton owns CUDA resources and must not be copied or moved.

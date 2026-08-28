@@ -53,10 +53,10 @@ private:
    * callback's consumer stream.
    *
    * @details Records an event on the consumer stream, or on the legacy default stream as a
-   * fallback, and makes CudaMemPoolContext::free_stream() wait on it. Call this right after the
+   * fallback, and makes CudaMemPoolContext::stream() wait on it. Call this right after the
    * callback returns, while the message is still alive, so the cudaFreeAsync issued by CudaDeleter
    * on the same free stream is ordered strictly after consumption. See
-   * CudaMemPoolContext::free_stream() for why the two streams must match.
+   * CudaMemPoolContext::stream() for why the streams must match.
    *
    * @note The legacy-default-stream fallback does not work when all of the following hold: the data
    * is consumed in the callback on a stream created with the cudaStreamNonBlocking flag, no proper

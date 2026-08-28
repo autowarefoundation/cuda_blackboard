@@ -140,8 +140,7 @@ void CudaBlackboardSubscriber<T>::addConsumerDependencyToFreeStream() const
   cudaEvent_t event;
   CUDA_BLACKBOARD_CHECK_CUDA_ERROR(cudaEventCreateWithFlags(&event, cudaEventDisableTiming));
   CUDA_BLACKBOARD_CHECK_CUDA_ERROR(cudaEventRecord(event, record_stream));
-  CUDA_BLACKBOARD_CHECK_CUDA_ERROR(
-    cudaStreamWaitEvent(ctx.free_stream(), event, cudaEventWaitDefault));
+  CUDA_BLACKBOARD_CHECK_CUDA_ERROR(cudaStreamWaitEvent(ctx.stream(), event, cudaEventWaitDefault));
   CUDA_BLACKBOARD_CHECK_CUDA_ERROR(cudaEventDestroy(event));
 }
 
