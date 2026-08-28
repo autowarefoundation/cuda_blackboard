@@ -12,7 +12,19 @@ namespace
 {
 size_t get_mem_pool_release_threshold()
 {
-  constexpr size_t default_threshold_mb = 1024;  // 1GiB
+  // How much memory the pool keeps mapped above what is currently in use, before it starts
+  // releasing pages back to the driver at the next synchronisation point.
+  //
+  // This is a memory/latency trade-off, and it is asymmetric: memory the pool retains is never
+  // handed back for the lifetime of the process, so the threshold effectively sets how much of a
+  // transient allocation peak becomes permanent. A perception container that briefly needs an
+  // extra buffer during one slow frame keeps that memory for the whole drive.
+  //
+  // 128 MiB comfortably absorbs the frame-to-frame variation of a multi-lidar pipeline (buffers
+  // there are tens of MiB) while bounding what a one-off spike can cost. The previous default of
+  // 1 GiB was measured holding 131 MiB above the peak that was ever actually live, on a workload
+  // whose steady-state usage was 288 MiB.
+  constexpr size_t default_threshold_mb = 128;
   // cspell:ignore mibi
   auto mibi_byte_to_byte = [](const auto & mib) { return mib * 1024 * 1024; };
 
