@@ -5,8 +5,21 @@
 #include "cuda_blackboard/cuda_blackboard.hpp"
 #include "cuda_blackboard/negotiated_types.hpp"
 
+#ifdef USE_AGNOCAST_ENABLED
+#include <autoware/agnocast_wrapper/publisher.hpp>
+#include <autoware/agnocast_wrapper/runtime.hpp>
+#endif
+
 namespace cuda_blackboard
 {
+
+template <typename T>
+struct CudaBlackboardPublisher<T>::AgnocastCompatiblePublisher
+{
+#ifdef USE_AGNOCAST_ENABLED
+  typename autoware::agnocast_wrapper::Publisher<typename T::ros_type>::SharedPtr publisher;
+#endif
+};
 
 template <typename T>
 CudaBlackboardPublisher<T>::CudaBlackboardPublisher(
@@ -25,6 +38,19 @@ CudaBlackboardPublisher<T>::CudaBlackboardPublisher(
     1.0,
     rclcpp::QoS(1),  //.durability_volatile(),
     pub_options);
+
+#ifdef USE_AGNOCAST_ENABLED
+  // On Agnocast, publish the ROS message through Agnocast so that subscribers in other Agnocast
+  // processes do not need a ROS 2 -> Agnocast bridge for it.
+  if (autoware::agnocast_wrapper::use_agnocast()) {
+    agnocast_compatible_pub_ = std::make_shared<AgnocastCompatiblePublisher>();
+    agnocast_compatible_pub_->publisher =
+      autoware::agnocast_wrapper::create_publisher<typename T::ros_type>(
+        &node, topic_name, rclcpp::SensorDataQoS());
+    negotiated_pub_->start();
+    return;
+  }
+#endif
 
   std::string ros_type_name = NegotiationStruct<typename T::ros_type>::supported_type_name;
   compatible_pub_ =
@@ -45,10 +71,20 @@ void CudaBlackboardPublisher<T>::publish(std::unique_ptr<const T> cuda_msg_ptr)
     negotiated::detail::generate_key(ros_type_name, NegotiationStruct<T>::supported_type_name);
 
   uint64_t instance_id{0};
-  bool publish_ros_msg =
-    negotiated_pub_->type_was_negotiated<NegotiationStruct<typename T::ros_type>>() &&
-    (compatible_pub_->get_subscription_count() > 0 ||
-     compatible_pub_->get_intra_process_subscription_count() > 0);
+  bool publish_ros_msg = false;
+#ifdef USE_AGNOCAST_ENABLED
+  if (agnocast_compatible_pub_) {
+    publish_ros_msg =
+      agnocast_compatible_pub_->publisher->get_subscription_count() > 0 ||
+      agnocast_compatible_pub_->publisher->get_intra_process_subscription_count() > 0;
+  } else
+#endif
+  {
+    publish_ros_msg =
+      negotiated_pub_->type_was_negotiated<NegotiationStruct<typename T::ros_type>>() &&
+      (compatible_pub_->get_subscription_count() > 0 ||
+       compatible_pub_->get_intra_process_subscription_count() > 0);
+  }
 
   // tickets are only given to intra process subscribers
   auto & publisher = map.at(key_name).publisher;
@@ -85,41 +121,64 @@ void CudaBlackboardPublisher<T>::publish(std::unique_ptr<const T> cuda_msg_ptr)
     instance_msg.data = static_cast<uint64_t>(instance_id);
     negotiated_pub_->publish<NegotiationStruct<T>>(instance_msg);
   } else if (publish_ros_msg) {
-    auto ros_msg_ptr = std::make_unique<typename T::ros_type>();
-    rclcpp::TypeAdapter<T>::convert_to_ros_message(*cuda_msg_ptr, *ros_msg_ptr);
-
-    compatible_pub_->publish(std::move(ros_msg_ptr));
+    publish_compatible(*cuda_msg_ptr);
   }
 
   // When we want to publish ros data, we need to use type adaptation
   if (publish_blackboard_msg && publish_ros_msg) {
     auto data = blackboard.queryData(instance_id);
-    auto ros_msg_ptr = std::make_unique<typename T::ros_type>();
-    rclcpp::TypeAdapter<T>::convert_to_ros_message(*data, *ros_msg_ptr);
-
-    compatible_pub_->publish(std::move(ros_msg_ptr));
+    publish_compatible(*data);
   }
+}
+
+template <typename T>
+void CudaBlackboardPublisher<T>::publish_compatible(const T & cuda_msg)
+{
+#ifdef USE_AGNOCAST_ENABLED
+  if (agnocast_compatible_pub_) {
+    auto & publisher = agnocast_compatible_pub_->publisher;
+    auto ros_msg_ptr = publisher->allocate_output_message_unique();
+    rclcpp::TypeAdapter<T>::convert_to_ros_message(cuda_msg, *ros_msg_ptr);
+    publisher->publish(std::move(ros_msg_ptr));
+    return;
+  }
+#endif
+  auto ros_msg_ptr = std::make_unique<typename T::ros_type>();
+  rclcpp::TypeAdapter<T>::convert_to_ros_message(cuda_msg, *ros_msg_ptr);
+  compatible_pub_->publish(std::move(ros_msg_ptr));
 }
 
 template <typename T>
 std::size_t CudaBlackboardPublisher<T>::get_subscription_count() const
 {
   auto & map = negotiated_pub_->get_supported_types();
-  return std::accumulate(map.begin(), map.end(), 0, [](int count, const auto & p) {
+  std::size_t total = std::accumulate(map.begin(), map.end(), 0, [](int count, const auto & p) {
     std::size_t sub_count = p.second.publisher ? p.second.publisher->get_subscription_count() : 0;
     return count + sub_count;
   });
+#ifdef USE_AGNOCAST_ENABLED
+  if (agnocast_compatible_pub_) {
+    total += agnocast_compatible_pub_->publisher->get_subscription_count();
+  }
+#endif
+  return total;
 }
 
 template <typename T>
 std::size_t CudaBlackboardPublisher<T>::get_intra_process_subscription_count() const
 {
   auto & map = negotiated_pub_->get_supported_types();
-  return std::accumulate(map.begin(), map.end(), 0, [](int count, const auto & p) {
+  std::size_t total = std::accumulate(map.begin(), map.end(), 0, [](int count, const auto & p) {
     std::size_t sub_count =
       p.second.publisher ? p.second.publisher->get_intra_process_subscription_count() : 0;
     return count + sub_count;
   });
+#ifdef USE_AGNOCAST_ENABLED
+  if (agnocast_compatible_pub_) {
+    total += agnocast_compatible_pub_->publisher->get_intra_process_subscription_count();
+  }
+#endif
+  return total;
 }
 
 }  // namespace cuda_blackboard

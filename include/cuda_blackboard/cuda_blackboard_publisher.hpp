@@ -24,9 +24,16 @@ public:
   std::size_t get_intra_process_subscription_count() const;
 
 private:
+  // Holds the Agnocast publisher of the ROS message when the node runs on Agnocast; defined in the
+  // source file so that this header does not depend on how its includer was built.
+  struct AgnocastCompatiblePublisher;
+
+  void publish_compatible(const T & cuda_msg);
+
   rclcpp::Node & node_;
   std::shared_ptr<negotiated::NegotiatedPublisher> negotiated_pub_;
   typename rclcpp::Publisher<typename T::ros_type>::SharedPtr compatible_pub_;
+  std::shared_ptr<AgnocastCompatiblePublisher> agnocast_compatible_pub_;
 };
 
 }  // namespace cuda_blackboard
