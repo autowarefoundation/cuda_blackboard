@@ -25,7 +25,7 @@ public:
 
 private:
   // Holds the Agnocast publisher of the ROS message when the node runs on Agnocast; defined in the
-  // source file so that this header does not depend on how its includer was built.
+  // source file so that this header is the same however the code including it was built.
   struct AgnocastCompatiblePublisher;
 
   void publish_compatible(const T & cuda_msg);

@@ -45,7 +45,9 @@ ament_auto_add_library(cuda_blackboard SHARED
 target_link_libraries(cuda_blackboard
     ${CUDA_LIBRARIES}
 )
-autoware_agnocast_wrapper_setup(cuda_blackboard)
+if(autoware_agnocast_wrapper_FOUND)
+  autoware_agnocast_wrapper_setup(cuda_blackboard)
+endif()
 
 ####
 
