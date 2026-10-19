@@ -7,8 +7,10 @@
 #include <rclcpp/rclcpp.hpp>
 
 #include <memory>
+#include <mutex>
 #include <string>
 #include <utility>
+#include <vector>
 
 namespace cuda_blackboard
 {
@@ -29,8 +31,20 @@ private:
   struct AgnocastCompatiblePublisher;
 
   void publish_compatible(const T & cuda_msg);
+  // publish() and the subscription counts may run on any thread: they read the negotiation state
+  // from a cache refreshed on the executor thread.
+  void refreshNegotiationCache();
 
   rclcpp::Node & node_;
+
+  // Declared before negotiated_pub_: its timer may still call refreshNegotiationCache() while it
+  // is being destroyed.
+  mutable std::mutex cache_mutex_;
+  bool negotiated_ros_{false};
+  bool negotiated_cuda_{false};
+  std::shared_ptr<rclcpp::PublisherBase> blackboard_pub_;
+  std::vector<std::shared_ptr<rclcpp::PublisherBase>> negotiated_pubs_;
+
   std::shared_ptr<negotiated::NegotiatedPublisher> negotiated_pub_;
   typename rclcpp::Publisher<typename T::ros_type>::SharedPtr compatible_pub_;
   std::shared_ptr<AgnocastCompatiblePublisher> agnocast_compatible_pub_;
