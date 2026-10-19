@@ -23,6 +23,7 @@ endif ()
 
 if(BUILD_TESTING)
     find_package(ament_lint_auto REQUIRED)
+    find_package(ament_cmake_gtest REQUIRED)
     ament_lint_auto_find_test_dependencies()
 endif()
 
@@ -47,6 +48,14 @@ target_link_libraries(cuda_blackboard
 )
 if(autoware_agnocast_wrapper_FOUND)
   autoware_agnocast_wrapper_setup(cuda_blackboard)
+endif()
+
+if(BUILD_TESTING)
+    ament_auto_find_test_dependencies()
+
+    # Needs a CUDA device at test time (skipped without one).
+    ament_add_gtest(test_cuda_blackboard_publisher test/test_cuda_blackboard_publisher.cpp)
+    target_link_libraries(test_cuda_blackboard_publisher cuda_blackboard ${CUDA_LIBRARIES})
 endif()
 
 ####
