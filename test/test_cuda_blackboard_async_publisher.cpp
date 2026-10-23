@@ -31,7 +31,7 @@ namespace cuda_blackboard::test
 
 using CudaBlackboardAsyncPublisherTest = CudaBlackboardNodeTest;
 
-TEST_F(CudaBlackboardAsyncPublisherTest, DeliversThroughItsWorkerAndJoinsItOnDestruction)
+TEST_F(CudaBlackboardAsyncPublisherTest, DeliversUntilDestroyed)
 {
   std::atomic<int> received{0};
   std::string received_frame;
