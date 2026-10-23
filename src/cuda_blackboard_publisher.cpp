@@ -28,6 +28,8 @@ CudaBlackboardPublisher<T>::CudaBlackboardPublisher(
 {
   negotiated::NegotiatedPublisherOptions negotiation_options;
   negotiation_options.disconnect_publishers_on_failure = false;
+  negotiation_options.successful_negotiation_cb =
+    [this](const negotiated_interfaces::msg::NegotiatedTopicsInfo &) { refreshNegotiationCache(); };
 
   negotiated_pub_ = std::make_shared<negotiated::NegotiatedPublisher>(
     node, topic_name + "/cuda", negotiation_options);
@@ -48,6 +50,7 @@ CudaBlackboardPublisher<T>::CudaBlackboardPublisher(
       autoware::agnocast_wrapper::create_publisher<typename T::ros_type>(
         &node, topic_name, rclcpp::SensorDataQoS());
     negotiated_pub_->start();
+    refreshNegotiationCache();
     return;
   }
 #endif
@@ -58,17 +61,47 @@ CudaBlackboardPublisher<T>::CudaBlackboardPublisher(
   negotiated_pub_->add_compatible_publisher(compatible_pub_, ros_type_name, 0.1);
 
   negotiated_pub_->start();
+  // the callback runs after every successful negotiation; without any NegotiatedSubscription
+  // negotiation never runs, so seed the cache with the compatible publisher here
+  refreshNegotiationCache();
+}
+
+template <typename T>
+void CudaBlackboardPublisher<T>::refreshNegotiationCache()
+{
+  using ROSMessageType = typename NegotiationStruct<T>::MsgT;
+  const std::string key_name = negotiated::detail::generate_key(
+    rosidl_generator_traits::name<ROSMessageType>(), NegotiationStruct<T>::supported_type_name);
+  const auto & map = negotiated_pub_->get_supported_types();
+  NegotiatedCache cache;
+  cache.negotiated_ros =
+    negotiated_pub_->type_was_negotiated<NegotiationStruct<typename T::ros_type>>();
+  cache.negotiated_cuda = negotiated_pub_->type_was_negotiated<NegotiationStruct<T>>();
+  cache.blackboard_pub = map.count(key_name) != 0 ? map.at(key_name).publisher : nullptr;
+  for (const auto & [key, info] : map) {
+    if (info.publisher) {
+      cache.negotiated_pubs.push_back(info.publisher);
+    }
+  }
+
+  std::lock_guard<std::mutex> lock(cache_mutex_);
+  negotiated_cache_ = std::move(cache);
 }
 
 template <typename T>
 void CudaBlackboardPublisher<T>::publish(std::unique_ptr<const T> cuda_msg_ptr)
 {
-  auto & map = negotiated_pub_->get_supported_types();
-
   using ROSMessageType = typename NegotiationStruct<T>::MsgT;
-  std::string ros_type_name = rosidl_generator_traits::name<ROSMessageType>();
-  std::string key_name =
-    negotiated::detail::generate_key(ros_type_name, NegotiationStruct<T>::supported_type_name);
+
+  bool negotiated_ros{false};
+  bool negotiated_cuda{false};
+  std::shared_ptr<rclcpp::PublisherBase> publisher;
+  {
+    std::lock_guard<std::mutex> lock(cache_mutex_);
+    negotiated_ros = negotiated_cache_.negotiated_ros;
+    negotiated_cuda = negotiated_cache_.negotiated_cuda;
+    publisher = negotiated_cache_.blackboard_pub;
+  }
 
   uint64_t instance_id{0};
   bool publish_ros_msg = false;
@@ -81,18 +114,15 @@ void CudaBlackboardPublisher<T>::publish(std::unique_ptr<const T> cuda_msg_ptr)
 #endif
   {
     publish_ros_msg =
-      negotiated_pub_->type_was_negotiated<NegotiationStruct<typename T::ros_type>>() &&
-      (compatible_pub_->get_subscription_count() > 0 ||
-       compatible_pub_->get_intra_process_subscription_count() > 0);
+      negotiated_ros && (compatible_pub_->get_subscription_count() > 0 ||
+                         compatible_pub_->get_intra_process_subscription_count() > 0);
   }
 
   // tickets are only given to intra process subscribers
-  auto & publisher = map.at(key_name).publisher;
   std::size_t tickets =
     publisher != nullptr ? publisher->get_intra_process_subscription_count() : 0;
 
-  bool publish_blackboard_msg =
-    negotiated_pub_->type_was_negotiated<NegotiationStruct<T>>() && tickets > 0;
+  bool publish_blackboard_msg = negotiated_cuda && tickets > 0;
 
   auto & blackboard = CudaBlackboard<T>::getInstance();
 
@@ -119,7 +149,8 @@ void CudaBlackboardPublisher<T>::publish(std::unique_ptr<const T> cuda_msg_ptr)
 
     auto instance_msg = std_msgs::msg::UInt64();
     instance_msg.data = static_cast<uint64_t>(instance_id);
-    negotiated_pub_->publish<NegotiationStruct<T>>(instance_msg);
+    // the same cast NegotiatedPublisher::publish() makes
+    static_cast<rclcpp::Publisher<ROSMessageType> *>(publisher.get())->publish(instance_msg);
   } else if (publish_ros_msg) {
     publish_compatible(*cuda_msg_ptr);
   }
@@ -151,11 +182,10 @@ void CudaBlackboardPublisher<T>::publish_compatible(const T & cuda_msg)
 template <typename T>
 std::size_t CudaBlackboardPublisher<T>::get_subscription_count() const
 {
-  auto & map = negotiated_pub_->get_supported_types();
-  std::size_t total = std::accumulate(map.begin(), map.end(), 0, [](int count, const auto & p) {
-    std::size_t sub_count = p.second.publisher ? p.second.publisher->get_subscription_count() : 0;
-    return count + sub_count;
-  });
+  std::lock_guard<std::mutex> lock(cache_mutex_);
+  std::size_t total = std::accumulate(
+    negotiated_cache_.negotiated_pubs.begin(), negotiated_cache_.negotiated_pubs.end(), 0,
+    [](int count, const auto & p) { return count + p->get_subscription_count(); });
 #ifdef USE_AGNOCAST_ENABLED
   if (agnocast_compatible_pub_) {
     total += agnocast_compatible_pub_->publisher->get_subscription_count();
@@ -167,12 +197,10 @@ std::size_t CudaBlackboardPublisher<T>::get_subscription_count() const
 template <typename T>
 std::size_t CudaBlackboardPublisher<T>::get_intra_process_subscription_count() const
 {
-  auto & map = negotiated_pub_->get_supported_types();
-  std::size_t total = std::accumulate(map.begin(), map.end(), 0, [](int count, const auto & p) {
-    std::size_t sub_count =
-      p.second.publisher ? p.second.publisher->get_intra_process_subscription_count() : 0;
-    return count + sub_count;
-  });
+  std::lock_guard<std::mutex> lock(cache_mutex_);
+  std::size_t total = std::accumulate(
+    negotiated_cache_.negotiated_pubs.begin(), negotiated_cache_.negotiated_pubs.end(), 0,
+    [](int count, const auto & p) { return count + p->get_intra_process_subscription_count(); });
 #ifdef USE_AGNOCAST_ENABLED
   if (agnocast_compatible_pub_) {
     total += agnocast_compatible_pub_->publisher->get_intra_process_subscription_count();
