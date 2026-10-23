@@ -73,22 +73,19 @@ void CudaBlackboardPublisher<T>::refreshNegotiationCache()
   const std::string key_name = negotiated::detail::generate_key(
     rosidl_generator_traits::name<ROSMessageType>(), NegotiationStruct<T>::supported_type_name);
   const auto & map = negotiated_pub_->get_supported_types();
-  const bool negotiated_ros =
+  NegotiatedCache cache;
+  cache.negotiated_ros =
     negotiated_pub_->type_was_negotiated<NegotiationStruct<typename T::ros_type>>();
-  const bool negotiated_cuda = negotiated_pub_->type_was_negotiated<NegotiationStruct<T>>();
-  auto blackboard_pub = map.count(key_name) != 0 ? map.at(key_name).publisher : nullptr;
-  std::vector<std::shared_ptr<rclcpp::PublisherBase>> negotiated_pubs;
+  cache.negotiated_cuda = negotiated_pub_->type_was_negotiated<NegotiationStruct<T>>();
+  cache.blackboard_pub = map.count(key_name) != 0 ? map.at(key_name).publisher : nullptr;
   for (const auto & [key, info] : map) {
     if (info.publisher) {
-      negotiated_pubs.push_back(info.publisher);
+      cache.negotiated_pubs.push_back(info.publisher);
     }
   }
 
   std::lock_guard<std::mutex> lock(cache_mutex_);
-  negotiated_ros_ = negotiated_ros;
-  negotiated_cuda_ = negotiated_cuda;
-  blackboard_pub_ = std::move(blackboard_pub);
-  negotiated_pubs_ = std::move(negotiated_pubs);
+  negotiated_cache_ = std::move(cache);
 }
 
 template <typename T>
@@ -101,9 +98,9 @@ void CudaBlackboardPublisher<T>::publish(std::unique_ptr<const T> cuda_msg_ptr)
   std::shared_ptr<rclcpp::PublisherBase> publisher;
   {
     std::lock_guard<std::mutex> lock(cache_mutex_);
-    negotiated_ros = negotiated_ros_;
-    negotiated_cuda = negotiated_cuda_;
-    publisher = blackboard_pub_;
+    negotiated_ros = negotiated_cache_.negotiated_ros;
+    negotiated_cuda = negotiated_cache_.negotiated_cuda;
+    publisher = negotiated_cache_.blackboard_pub;
   }
 
   uint64_t instance_id{0};
@@ -187,7 +184,7 @@ std::size_t CudaBlackboardPublisher<T>::get_subscription_count() const
 {
   std::lock_guard<std::mutex> lock(cache_mutex_);
   std::size_t total = std::accumulate(
-    negotiated_pubs_.begin(), negotiated_pubs_.end(), 0,
+    negotiated_cache_.negotiated_pubs.begin(), negotiated_cache_.negotiated_pubs.end(), 0,
     [](int count, const auto & p) { return count + p->get_subscription_count(); });
 #ifdef USE_AGNOCAST_ENABLED
   if (agnocast_compatible_pub_) {
@@ -202,7 +199,7 @@ std::size_t CudaBlackboardPublisher<T>::get_intra_process_subscription_count() c
 {
   std::lock_guard<std::mutex> lock(cache_mutex_);
   std::size_t total = std::accumulate(
-    negotiated_pubs_.begin(), negotiated_pubs_.end(), 0,
+    negotiated_cache_.negotiated_pubs.begin(), negotiated_cache_.negotiated_pubs.end(), 0,
     [](int count, const auto & p) { return count + p->get_intra_process_subscription_count(); });
 #ifdef USE_AGNOCAST_ENABLED
   if (agnocast_compatible_pub_) {
