@@ -37,13 +37,22 @@ private:
 
   rclcpp::Node & node_;
 
-  // Declared before negotiated_pub_: its timer may still call refreshNegotiationCache() while it
-  // is being destroyed.
+  struct NegotiatedCache
+  {
+    /// A subscriber negotiated the plain ROS message type.
+    bool negotiated_ros{false};
+    /// A subscriber negotiated the CUDA type, delivered through the blackboard.
+    bool negotiated_cuda{false};
+    /// Publisher of the blackboard instance ids.
+    std::shared_ptr<rclcpp::PublisherBase> blackboard_pub;
+    /// Every live publisher, negotiated and compatible.
+    std::vector<std::shared_ptr<rclcpp::PublisherBase>> negotiated_pubs;
+  };
+
+  // Both declared before negotiated_pub_: its timer may still call refreshNegotiationCache() while
+  // it is being destroyed.
   mutable std::mutex cache_mutex_;
-  bool negotiated_ros_{false};
-  bool negotiated_cuda_{false};
-  std::shared_ptr<rclcpp::PublisherBase> blackboard_pub_;
-  std::vector<std::shared_ptr<rclcpp::PublisherBase>> negotiated_pubs_;
+  NegotiatedCache negotiated_cache_;
 
   std::shared_ptr<negotiated::NegotiatedPublisher> negotiated_pub_;
   typename rclcpp::Publisher<typename T::ros_type>::SharedPtr compatible_pub_;
