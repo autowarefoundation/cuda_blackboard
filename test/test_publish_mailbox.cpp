@@ -19,8 +19,8 @@
 
 #include <gtest/gtest.h>
 
-#include <atomic>
 #include <chrono>
+#include <future>
 #include <memory>
 #include <optional>
 #include <thread>
@@ -58,19 +58,21 @@ TEST(PublishMailboxTest, NewerDepositReplacesTheWaitingItemAndCountsIt)
 TEST(PublishMailboxTest, TakeBlocksUntilADepositArrives)
 {
   PublishMailbox<Item> mailbox;
-  std::atomic<bool> taken{false};
+  std::promise<void> started;
+  std::promise<void> taken;
+  std::future<void> taken_future = taken.get_future();
   std::optional<Item> item;
   std::thread consumer([&]() {
+    started.set_value();
     item = mailbox.take();
-    taken = true;
+    taken.set_value();
   });
 
-  std::this_thread::sleep_for(std::chrono::milliseconds(50));
-  EXPECT_FALSE(taken);
+  started.get_future().wait();
+  EXPECT_EQ(taken_future.wait_for(std::chrono::milliseconds(50)), std::future_status::timeout);
 
   mailbox.deposit(std::make_unique<int>(7));
   consumer.join();
-  EXPECT_TRUE(taken);
   ASSERT_TRUE(item.has_value());
   EXPECT_EQ(**item, 7);
 }
@@ -79,16 +81,21 @@ TEST(PublishMailboxTest, StopWakesTheConsumerAndDiscardsTheWaitingItem)
 {
   PublishMailbox<Item> mailbox;
   mailbox.deposit(std::make_unique<int>(1));
-  std::optional<Item> item;
+  std::promise<void> first_taken;
+  std::optional<Item> first;
+  std::optional<Item> second;
   std::thread consumer([&]() {
-    item = mailbox.take();  // the deposited item
-    item = mailbox.take();  // blocks until stop()
+    first = mailbox.take();
+    first_taken.set_value();
+    second = mailbox.take();  // blocks until stop()
   });
 
-  std::this_thread::sleep_for(std::chrono::milliseconds(50));
+  first_taken.get_future().wait();
   mailbox.stop();
   consumer.join();
-  EXPECT_FALSE(item.has_value());
+  ASSERT_TRUE(first.has_value());
+  EXPECT_EQ(**first, 1);
+  EXPECT_FALSE(second.has_value());
 
   // Nothing is handed out or kept after stop().
   mailbox.deposit(std::make_unique<int>(2));

@@ -10,14 +10,13 @@
 namespace cuda_blackboard
 {
 
-/// Single-slot hand-over from a producer to one consumer thread; newest wins.
+/// Single-slot, newest-wins hand-over from a producer to one consumer thread.
 ///
-/// deposit() never blocks: when the slot still holds an item the consumer has not taken, that
-/// stale item is replaced by the new one and counted in dropped(). take() waits until an item is
-/// present or stop() was called. stop() discards a pending item and wakes the waiter; from then
-/// on take() returns nothing and deposit() discards its argument, so the consumer loop ends and
-/// nothing is handed out after shutdown began. Items are destroyed outside the lock. No ROS, no
-/// CUDA: T is any movable type.
+/// deposit() never blocks; it replaces an untaken item and counts it in dropped(). take() blocks
+/// until an item arrives or stop() is called. stop() discards the pending item; afterwards take()
+/// returns nothing and deposit() discards its argument. Items are destroyed outside the lock.
+///
+/// @tparam T Any movable type.
 template <typename T>
 class PublishMailbox
 {
