@@ -42,6 +42,7 @@ ament_auto_add_library(cuda_blackboard SHARED
     src/cuda_message_impl_detail.cpp
     src/cuda_pointcloud2.cpp
     src/cuda_blackboard_publisher.cpp
+    src/cuda_blackboard_async_publisher.cpp
     src/cuda_blackboard_subscriber.cpp
     src/cuda_mem_pool_context.cpp
 )
@@ -62,6 +63,13 @@ if(BUILD_TESTING)
 
     ament_add_gtest(test_cuda_blackboard_async_publisher test/test_cuda_blackboard_async_publisher.cpp)
     target_link_libraries(test_cuda_blackboard_async_publisher cuda_blackboard ${CUDA_LIBRARIES})
+
+    if(autoware_agnocast_wrapper_FOUND)
+      ament_add_gtest(test_start_worker_thread test/test_start_worker_thread.cpp
+        ENV ENABLE_AGNOCAST=1)
+      target_link_libraries(test_start_worker_thread cuda_blackboard
+        agnocast_cie_thread_configurator::agnocast_thread_configurator)
+    endif()
 endif()
 
 ####

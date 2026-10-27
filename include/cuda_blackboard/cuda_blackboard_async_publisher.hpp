@@ -11,6 +11,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <exception>
+#include <functional>
 #include <memory>
 #include <string>
 #include <thread>
@@ -18,6 +19,15 @@
 
 namespace cuda_blackboard
 {
+
+namespace detail
+{
+/// Runs body on a new thread. On Agnocast, the thread is announced to the CIE thread configurator
+/// as "<fully qualified node name>@<resolved topic name>", so that the configurator can set its
+/// scheduling.
+std::thread start_worker_thread(
+  rclcpp::Node & node, const std::string & topic_name, std::function<void()> body);
+}  // namespace detail
 
 /// A CudaBlackboardPublisher whose publish() returns at once: the message goes into a single-slot
 /// mailbox and a worker thread owned by this object does the publish (D2H copy and serialization
@@ -32,7 +42,8 @@ public:
   : logger_(node.get_logger()), publisher_(node, topic_name)
   {
     // Last, so that a throwing constructor never leaves a joinable thread behind.
-    worker_ = std::thread([this, topic_name] { run(topic_name); });
+    worker_ =
+      detail::start_worker_thread(node, topic_name, [this, topic_name] { run(topic_name); });
   }
 
   ~CudaBlackboardAsyncPublisher()

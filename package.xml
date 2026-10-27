@@ -12,6 +12,7 @@
   <buildtool_depend>ament_cmake_auto</buildtool_depend>
   <buildtool_depend>ros_environment</buildtool_depend>
 
+  <depend condition="$ENABLE_AGNOCAST == 1">agnocast_cie_thread_configurator</depend>
   <depend condition="$ENABLE_AGNOCAST == 1">autoware_agnocast_wrapper</depend>
   <depend>cv_bridge</depend>
   <depend>negotiated</depend>
