@@ -65,9 +65,10 @@ inline UniquePtrT make_unique_impl(const std::size_t n)
   ElementT * p;
   auto & mem_pool_ctx = CudaMemPoolContext::getInstance();
 
-  CUDA_BLACKBOARD_CHECK_CUDA_ERROR(::cudaMallocFromPoolAsync(
-    reinterpret_cast<void **>(&p), sizeof(ElementT) * n, mem_pool_ctx.pool(),
-    mem_pool_ctx.stream()));
+  CUDA_BLACKBOARD_CHECK_CUDA_ERROR(
+    ::cudaMallocFromPoolAsync(
+      reinterpret_cast<void **>(&p), sizeof(ElementT) * n, mem_pool_ctx.pool(),
+      mem_pool_ctx.stream()));
 
   // To prevent unexpected behavior caused by dirty region allocated by the pool,
   // zero clear the taken region
