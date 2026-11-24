@@ -15,6 +15,7 @@
     - source: .yamllint.yaml
     - source: CPPLINT.cfg
     - source: setup.cfg
+    - source: codecov.yaml
     - source: .github/workflows/build-and-test.yaml
     - source: .github/workflows/build-and-test-differential.yaml
     - source: .github/workflows/cancel-previous-workflows.yaml
