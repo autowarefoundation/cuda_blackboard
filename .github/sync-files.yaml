@@ -24,6 +24,7 @@
 - repository: autowarefoundation/autoware.universe
   files:
     - source: .github/cppcheck-problem-matcher.json
-    - source: .github/workflows/cppcheck-weekly.yaml
+    - source: .github/workflows/cppcheck.yaml
     - source: .github/workflows/cppcheck-differential.yaml
     - source: .cppcheck_suppressions
+    - source: .cppcheck_macros.cfg
